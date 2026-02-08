@@ -262,8 +262,43 @@
       border: 3px solid var(--card);
     }
 
-    .divider {
-      height: 8px;
+    /* ── Advanced Drawer ── */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-header .card-title { margin-bottom: 0; }
+    .drawer-toggle {
+      background: none;
+      border: none;
+      padding: 8px;
+      margin: -8px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: transform 0.25s;
+      font-size: 0;
+    }
+    .drawer-toggle.open { transform: rotate(180deg); }
+    .drawer-toggle svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+    .drawer {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.25s ease;
+    }
+    .drawer.open {
+      grid-template-rows: 1fr;
+    }
+    .drawer-inner {
+      overflow: hidden;
+    }
+    .drawer .room-row:first-child {
+      border-top: 1px solid var(--border);
     }
 
     /* ── Responsive ── */
@@ -329,7 +364,12 @@
 
     <!-- Upstairs Zone -->
     <div class="card">
-      <div class="card-title">Upstairs</div>
+      <div class="card-header">
+        <div class="card-title">Upstairs</div>
+        <button class="drawer-toggle" aria-label="Advanced settings">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
+        </button>
+      </div>
       <div class="temp-control">
         <div class="temp-display" id="temp-up">20<span class="unit">°C</span></div>
         <div class="temp-range-row">
@@ -350,11 +390,24 @@
         <span class="room-label"><i class="icon-radiator"></i> Kids' Room</span>
         <label class="toggle warm"><input type="checkbox" checked><span class="slider"></span></label>
       </div>
+      <div class="drawer">
+        <div class="drawer-inner">
+          <div class="room-row">
+            <span class="room-label"><i class="icon-volume-x"></i> Quiet</span>
+            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Downstairs Zone -->
     <div class="card">
-      <div class="card-title">Downstairs</div>
+      <div class="card-header">
+        <div class="card-title">Downstairs</div>
+        <button class="drawer-toggle" aria-label="Advanced settings">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
+        </button>
+      </div>
       <div class="temp-control">
         <div class="temp-display" id="temp-down">21<span class="unit">°C</span></div>
         <div class="temp-range-row">
@@ -374,6 +427,14 @@
       <div class="room-row">
         <span class="room-label"><i class="icon-radiator"></i> Hallway</span>
         <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="drawer">
+        <div class="drawer-inner">
+          <div class="room-row">
+            <span class="room-label"><i class="icon-volume-x"></i> Quiet</span>
+            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -422,6 +483,14 @@
     const sync = () => icon.classList.toggle('lit', cb.checked);
     cb.addEventListener('change', sync);
     sync();
+  });
+
+  // ── Advanced drawers ──
+  document.querySelectorAll('.drawer-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('open');
+      btn.closest('.card').querySelector('.drawer').classList.toggle('open');
+    });
   });
 
   // ── Heating toggle icon glow ──
