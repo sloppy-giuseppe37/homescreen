@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="color-scheme" content="light dark">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Home Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,6 +29,17 @@
       --warm-glow: rgba(245,158,11,0.15);
       --radius: 16px;
       --radius-sm: 10px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --card: #1f2937;
+        --text: #f3f4f6;
+        --text-muted: #9ca3af;
+        --border: #374151;
+        --off: #4b5563;
+      }
     }
 
     body {
@@ -167,7 +179,7 @@
       left: 3px;
       width: 24px;
       height: 24px;
-      background: #fff;
+      background: var(--card);
       border-radius: 50%;
       box-shadow: 0 1px 4px rgba(0,0,0,0.15);
       transition: transform 0.25s;
@@ -238,7 +250,7 @@
       background: var(--warm);
       cursor: pointer;
       box-shadow: 0 2px 8px rgba(245,158,11,0.4);
-      border: 3px solid #fff;
+      border: 3px solid var(--card);
     }
     input[type=range]::-moz-range-thumb {
       width: 32px;
@@ -247,7 +259,7 @@
       background: var(--warm);
       cursor: pointer;
       box-shadow: 0 2px 8px rgba(245,158,11,0.4);
-      border: 3px solid #fff;
+      border: 3px solid var(--card);
     }
 
     .divider {
@@ -397,7 +409,8 @@
       display.innerHTML = slider.value + '<span class="unit">°C</span>';
       // color the track proportionally
       const pct = ((slider.value - 16) / 9) * 100;
-      slider.style.background = `linear-gradient(to right, #f59e0b ${pct}%, #e5e7eb ${pct}%)`;
+      const trackBg = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+      slider.style.background = `linear-gradient(to right, #f59e0b ${pct}%, ${trackBg} ${pct}%)`;
     };
     slider.addEventListener('input', update);
     update();
