@@ -280,7 +280,8 @@
       transition: transform 0.25s;
       font-size: 0;
     }
-    .drawer-toggle.open { transform: rotate(180deg); }
+    .drawer-toggle { transform: rotate(-90deg); }
+    .drawer-toggle.open { transform: rotate(0deg); }
     .drawer-toggle svg {
       width: 16px;
       height: 16px;
@@ -370,6 +371,14 @@
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
         </button>
       </div>
+      <div class="drawer">
+        <div class="drawer-inner">
+          <div class="room-row">
+            <span class="room-label">Quiet</span>
+            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
       <div class="temp-control">
         <div class="temp-display" id="temp-up">20<span class="unit">°C</span></div>
         <div class="temp-range-row">
@@ -390,14 +399,6 @@
         <span class="room-label"><i class="icon-radiator"></i> Kids' Room</span>
         <label class="toggle warm"><input type="checkbox" checked><span class="slider"></span></label>
       </div>
-      <div class="drawer">
-        <div class="drawer-inner">
-          <div class="room-row">
-            <span class="room-label"><i class="icon-volume-x"></i> Quiet</span>
-            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Downstairs Zone -->
@@ -407,6 +408,14 @@
         <button class="drawer-toggle" aria-label="Advanced settings">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
         </button>
+      </div>
+      <div class="drawer">
+        <div class="drawer-inner">
+          <div class="room-row">
+            <span class="room-label">Quiet</span>
+            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
+          </div>
+        </div>
       </div>
       <div class="temp-control">
         <div class="temp-display" id="temp-down">21<span class="unit">°C</span></div>
@@ -427,14 +436,6 @@
       <div class="room-row">
         <span class="room-label"><i class="icon-radiator"></i> Hallway</span>
         <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
-      </div>
-      <div class="drawer">
-        <div class="drawer-inner">
-          <div class="room-row">
-            <span class="room-label"><i class="icon-volume-x"></i> Quiet</span>
-            <label class="toggle warm"><input type="checkbox"><span class="slider"></span></label>
-          </div>
-        </div>
       </div>
     </div>
   </div>
