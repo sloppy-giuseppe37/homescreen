@@ -1,10 +1,10 @@
 [project]
 name = "faikout"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pythonic MQTT API for Faikout (Daikin AC) devices"
 requires-python = ">=3.10"
 dependencies = [
-    "paho-mqtt>=2.0",
+    "gmqtt>=0.7.0",
 ]
 
 [project.optional-dependencies]

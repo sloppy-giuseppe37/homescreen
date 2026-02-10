@@ -26,8 +26,15 @@ Usage::
 Design decisions
 ----------------
 
+Asyncio with gmqtt
+    The previous paho-mqtt version used one thread per simulated unit plus
+    the paho network thread.  This version uses a single asyncio event loop.
+    Each unit's physics/publish cycle is an ``async def`` coroutine managed
+    by ``asyncio.gather()``.  This eliminates all threading, all locks, and
+    the silent message-delivery stalls we saw with paho-mqtt v2.
+
 Single MQTT client for all units
-    All simulated units share one paho-mqtt client.  This is simpler and uses
+    All simulated units share one gmqtt client.  This is simpler and uses
     fewer broker connections.  The downside is MQTT only allows one LWT per
     client, so only the first unit gets a proper offline LWT.  A real Faikout
     device is one unit per ESP32 with its own connection.  For testing purposes
@@ -40,11 +47,6 @@ Thermal simulation
     accurate building simulation.  It produces believable temperature curves
     that exercise the controller's state tracking.
 
-Thread-per-unit loop
-    Each unit runs its physics tick and status publish on a daemon thread.
-    The MQTT message callback dispatches commands to units on the paho
-    network thread.  A per-unit lock serialises access between the two.
-
 Realistic initial state
     Each unit starts with randomised room temperature, outdoor temperature,
     humidity, energy counters, and a random Daikin model string.  This tests
@@ -54,15 +56,15 @@ Realistic initial state
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
-import math
 import random
+import signal
 import sys
-import threading
-import time
+from typing import Optional
 
-import paho.mqtt.client as mqtt
+import gmqtt
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,7 +82,7 @@ COOLING_POWER = 0.04         # degrees per tick when actively cooling
 HEATING_POWER = 0.04         # degrees per tick when actively heating
 DRY_COOLING = 0.01           # mild cooling in dry mode
 TICK_INTERVAL = 2.0          # simulation tick (seconds)
-REPORT_INTERVAL = 10.0       # status publish interval (seconds)
+REPORT_INTERVAL = 10.0       # default status publish interval (seconds)
 
 # ---------------------------------------------------------------------------
 # Valid enums
@@ -90,9 +92,14 @@ VALID_FANS = {"A", "1", "2", "3", "4", "5", "Q"}
 
 
 class SimulatedUnit:
-    """Simulates one Faikout device."""
+    """Simulates one Faikout device.
 
-    def __init__(self, hostname: str, client: mqtt.Client):
+    This class owns only the AC state and thermal simulation logic.
+    It does NOT own the MQTT client — that's passed in by the runner,
+    so multiple units can share one connection.
+    """
+
+    def __init__(self, hostname: str, client: gmqtt.Client):
         self.hostname = hostname
         self.client = client
         self.log = logging.getLogger(f"sim.{hostname}")
@@ -137,21 +144,18 @@ class SimulatedUnit:
         self._active_cooling = False
 
         # --- settings ---
-        self.settings = {
+        self.settings: dict = {
             "reporting": REPORT_INTERVAL,
             "livestatus": False,
             "ha.enable": True,
         }
-
-        self._lock = threading.Lock()
-        self._running = False
 
     # -------------------------------------------------------------------
     # MQTT subscriptions
     # -------------------------------------------------------------------
 
     def subscribe(self):
-        """Subscribe to command and setting topics."""
+        """Subscribe to command and setting topics for this unit."""
         self.client.subscribe(f"command/{self.hostname}/#")
         self.client.subscribe(f"command/{self.hostname}")
         self.client.subscribe(f"setting/{self.hostname}/#")
@@ -162,24 +166,24 @@ class SimulatedUnit:
     # -------------------------------------------------------------------
 
     def handle_message(self, topic: str, payload: str):
+        """Dispatch an incoming MQTT message to the right handler."""
         parts = topic.split("/")
         if len(parts) < 2:
             return
 
         prefix = parts[0]
-        # Ignore messages not for us
         if parts[1] != self.hostname:
             return
 
         suffix = "/".join(parts[2:]) if len(parts) > 2 else ""
 
-        with self._lock:
-            if prefix == "command":
-                self._handle_command(suffix, payload)
-            elif prefix == "setting":
-                self._handle_setting(suffix, payload)
+        if prefix == "command":
+            self._handle_command(suffix, payload)
+        elif prefix == "setting":
+            self._handle_setting(suffix, payload)
 
     def _handle_command(self, suffix: str, payload: str):
+        """Handle a command/{hostname}/... message."""
         if suffix == "":
             # JSON control command
             try:
@@ -225,8 +229,6 @@ class SimulatedUnit:
             self._publish_status()
         elif cmd == "mode":
             self._handle_ha_mode(payload)
-        elif cmd == "fan":
-            self._handle_ha_fan(payload)
         elif cmd == "swing":
             self._handle_ha_swing(payload)
         elif cmd == "power":
@@ -336,6 +338,7 @@ class SimulatedUnit:
             self.swingv = True
 
     def _handle_preset(self, payload: str):
+        """Handle HA preset mode command."""
         p = payload.strip().lower()
         if p == "eco":
             self.econo = True
@@ -348,6 +351,7 @@ class SimulatedUnit:
             self.powerful = False
 
     def _handle_setting(self, suffix: str, payload: str):
+        """Handle a setting/{hostname}/... message."""
         if suffix == "" and not payload:
             # Return all settings
             self.client.publish(
@@ -364,7 +368,6 @@ class SimulatedUnit:
                 pass
             return
         if suffix and payload:
-            # Try to parse value
             try:
                 val = json.loads(payload)
             except json.JSONDecodeError:
@@ -396,7 +399,6 @@ class SimulatedUnit:
                     self._active_cooling = True
                     self._active_heating = False
                 else:
-                    # In range, coast
                     self._active_heating = False
                     self._active_cooling = False
 
@@ -411,7 +413,10 @@ class SimulatedUnit:
                     self._active_heating = False
                 else:
                     self._active_cooling = False
-                self.comp_freq = int(30 + (self.home_temp - self.temp) * 10) if self._active_cooling else 0
+                self.comp_freq = (
+                    int(30 + (self.home_temp - self.temp) * 10)
+                    if self._active_cooling else 0
+                )
                 self.comp_freq = max(0, min(120, self.comp_freq))
 
             elif effective_mode == "H":
@@ -422,7 +427,10 @@ class SimulatedUnit:
                     self._active_cooling = False
                 else:
                     self._active_heating = False
-                self.comp_freq = int(30 + (self.temp - self.home_temp) * 10) if self._active_heating else 0
+                self.comp_freq = (
+                    int(30 + (self.temp - self.home_temp) * 10)
+                    if self._active_heating else 0
+                )
                 self.comp_freq = max(0, min(120, self.comp_freq))
 
             elif effective_mode == "D":
@@ -438,7 +446,10 @@ class SimulatedUnit:
                 self._active_heating = False
 
             # Fan RPM
-            fan_rpms = {"Q": 350, "1": 500, "2": 700, "3": 900, "4": 1100, "5": 1300, "A": 800}
+            fan_rpms = {
+                "Q": 350, "1": 500, "2": 700, "3": 900,
+                "4": 1100, "5": 1300, "A": 800,
+            }
             self.fan_rpm = fan_rpms.get(self.fan, 800)
             if self.quiet:
                 self.fan_rpm = min(self.fan_rpm, 400)
@@ -469,7 +480,11 @@ class SimulatedUnit:
 
         # Inlet/liquid follow home temp with lag
         self.inlet_temp += (self.home_temp - self.inlet_temp) * 0.1
-        self.liquid_temp += ((self.home_temp - 8 if self._active_cooling else self.home_temp + 3) - self.liquid_temp) * 0.05
+        target_liquid = (
+            self.home_temp - 8 if self._active_cooling
+            else self.home_temp + 3
+        )
+        self.liquid_temp += (target_liquid - self.liquid_temp) * 0.05
 
         # Humidity drift
         self.humidity += random.uniform(-0.2, 0.2)
@@ -479,13 +494,18 @@ class SimulatedUnit:
         self.outside_temp += random.uniform(-0.05, 0.05)
 
     def _fan_multiplier(self) -> float:
-        return {"Q": 0.5, "1": 0.6, "2": 0.75, "3": 0.9, "4": 1.0, "5": 1.1, "A": 0.9}.get(self.fan, 0.9)
+        """Map fan setting to a cooling/heating rate multiplier."""
+        return {
+            "Q": 0.5, "1": 0.6, "2": 0.75, "3": 0.9,
+            "4": 1.0, "5": 1.1, "A": 0.9,
+        }.get(self.fan, 0.9)
 
     # -------------------------------------------------------------------
     # Status publishing
     # -------------------------------------------------------------------
 
     def _build_status(self) -> dict:
+        """Build the full status JSON (published on state/{hostname}/status)."""
         status = {
             "online": True,
             "model": self.model,
@@ -527,8 +547,14 @@ class SimulatedUnit:
 
     def _build_ha_status(self) -> dict:
         """Build the HA-format state (published on state/{hostname})."""
-        mode_map = {"F": "fan_only", "H": "heat", "C": "cool", "A": "heat_cool", "D": "dry"}
-        fan_map = {"A": "auto", "1": "low", "2": "lowMedium", "3": "medium", "4": "mediumHigh", "5": "high", "Q": "night"}
+        mode_map = {
+            "F": "fan_only", "H": "heat", "C": "cool",
+            "A": "heat_cool", "D": "dry",
+        }
+        fan_map = {
+            "A": "auto", "1": "low", "2": "lowMedium",
+            "3": "medium", "4": "mediumHigh", "5": "high", "Q": "night",
+        }
 
         ha_mode = "off" if not self.power else mode_map.get(self.mode, "off")
 
@@ -583,107 +609,147 @@ class SimulatedUnit:
         }
 
     def _publish_status(self):
-        with self._lock:
-            status = self._build_status()
-            ha_status = self._build_ha_status()
+        """Publish both full-status and HA-format state to MQTT."""
+        status = self._build_status()
+        ha_status = self._build_ha_status()
 
         self.client.publish(
             f"state/{self.hostname}/status",
             json.dumps(status),
             retain=True,
         )
-        # HA-format state on state/{hostname}
         self.client.publish(
             f"state/{self.hostname}",
             json.dumps(ha_status),
             retain=True,
         )
 
-    def _publish_lwt_online(self):
-        self.client.publish(f"state/{self.hostname}", json.dumps(self._build_ha_status()), retain=True)
-
     # -------------------------------------------------------------------
-    # Main loop
+    # Main loop (async)
     # -------------------------------------------------------------------
 
-    def start(self):
-        self._running = True
+    async def run(self, stop_event: asyncio.Event):
+        """Run the unit's simulation loop until stop_event is set.
+
+        This is the async replacement for the old threading approach.
+        Each tick runs the physics simulation and, at the configured
+        reporting interval, publishes status.
+        """
         self.subscribe()
-        self._publish_lwt_online()
         self._publish_status()
-        threading.Thread(target=self._loop, daemon=True, name=f"sim-{self.hostname}").start()
         self.log.info("Started (model=%s, home=%.1f°C)", self.model, self.home_temp)
 
-    def stop(self):
-        self._running = False
-        # Publish offline LWT
-        self.client.publish(f"state/{self.hostname}", "false", retain=True)
-
-    def _loop(self):
-        last_report = 0.0
-        while self._running:
-            time.sleep(TICK_INTERVAL)
-            with self._lock:
-                self._tick()
-            now = time.time()
-            if now - last_report >= self.settings.get("reporting", REPORT_INTERVAL):
+        last_report = asyncio.get_event_loop().time()
+        while not stop_event.is_set():
+            await asyncio.sleep(TICK_INTERVAL)
+            self._tick()
+            now = asyncio.get_event_loop().time()
+            interval = self.settings.get("reporting", REPORT_INTERVAL)
+            if now - last_report >= interval:
                 self._publish_status()
                 last_report = now
+
+    def stop(self):
+        """Publish offline LWT."""
+        self.client.publish(
+            f"state/{self.hostname}", "false", retain=True
+        )
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    parser = argparse.ArgumentParser(description="Faikout device simulator")
-    parser.add_argument("hostnames", nargs="*", default=["SimAC1"],
-                        help="Hostnames for simulated units (default: SimAC1)")
-    parser.add_argument("--broker", "-b", default="localhost", help="MQTT broker")
-    parser.add_argument("--port", "-p", type=int, default=1883, help="MQTT port")
-    parser.add_argument("--reporting", "-r", type=float, default=10.0,
-                        help="Status reporting interval in seconds")
-    args = parser.parse_args()
+async def run_simulator(
+    hostnames: list[str],
+    broker: str = "localhost",
+    port: int = 1883,
+    reporting: float = REPORT_INTERVAL,
+):
+    """Run the simulator as an async coroutine.
 
-    client = mqtt.Client(
-        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id=f"faikout-sim-{random.randint(1000,9999)}",
+    This is the programmatic entry point, useful for embedding the simulator
+    in tests or other async applications.
+    """
+    client = gmqtt.Client(
+        f"faikout-sim-{random.randint(1000, 9999)}",
+        will_message=gmqtt.Message(
+            f"state/{hostnames[0]}", "false", retain=True
+        ) if hostnames else None,
     )
 
     units: list[SimulatedUnit] = []
-    for name in args.hostnames:
+    for name in hostnames:
         u = SimulatedUnit(name, client)
-        u.settings["reporting"] = args.reporting
+        u.settings["reporting"] = reporting
         units.append(u)
 
-    def on_connect(c, userdata, flags, rc, properties=None):
-        log.info("Connected to %s:%d", args.broker, args.port)
-        for u in units:
-            u.start()
+    connected = asyncio.Event()
 
-    def on_message(c, userdata, msg):
-        payload = msg.payload.decode("utf-8", errors="replace") if msg.payload else ""
+    def on_connect(client, flags, rc, properties):
+        log.info("Connected to %s:%d", broker, port)
+        connected.set()
+
+    def on_message(client, topic, payload, qos, properties):
+        payload_str = payload.decode("utf-8", errors="replace") if payload else ""
         for u in units:
-            u.handle_message(msg.topic, payload)
+            u.handle_message(topic, payload_str)
+        return 0
 
     client.on_connect = on_connect
     client.on_message = on_message
 
-    # Set LWT for all units
-    # (MQTT only allows one will; use first unit)
-    if units:
-        client.will_set(f"state/{units[0].hostname}", "false", retain=True)
+    log.info("Starting simulator with units: %s", ", ".join(hostnames))
+    await client.connect(broker, port, version=4)
+    await asyncio.sleep(0.1)  # let on_connect fire
 
-    log.info("Starting simulator with units: %s", ", ".join(args.hostnames))
-    client.connect(args.broker, args.port)
+    stop_event = asyncio.Event()
 
+    # Install signal handlers for clean shutdown.
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop_event.set)
+        except NotImplementedError:
+            pass  # Windows doesn't support add_signal_handler
+
+    # Run all unit loops concurrently.
     try:
-        client.loop_forever()
-    except KeyboardInterrupt:
+        await asyncio.gather(*(u.run(stop_event) for u in units))
+    except asyncio.CancelledError:
+        pass
+    finally:
         log.info("Shutting down...")
         for u in units:
             u.stop()
-        client.disconnect()
+        await client.disconnect()
+
+
+def main():
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(description="Faikout device simulator")
+    parser.add_argument(
+        "hostnames", nargs="*", default=["SimAC1"],
+        help="Hostnames for simulated units (default: SimAC1)",
+    )
+    parser.add_argument(
+        "--broker", "-b", default="localhost", help="MQTT broker",
+    )
+    parser.add_argument(
+        "--port", "-p", type=int, default=1883, help="MQTT port",
+    )
+    parser.add_argument(
+        "--reporting", "-r", type=float, default=10.0,
+        help="Status reporting interval in seconds",
+    )
+    args = parser.parse_args()
+
+    asyncio.run(run_simulator(
+        hostnames=args.hostnames,
+        broker=args.broker,
+        port=args.port,
+        reporting=args.reporting,
+    ))
 
 
 if __name__ == "__main__":

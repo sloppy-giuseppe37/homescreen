@@ -5,10 +5,10 @@ from .unit import FaikoutUnit
 from .controller import FaikoutController
 
 __all__ = [
+    "FaikoutController",
+    "FaikoutUnit",
     "Mode",
     "Fan",
     "SwingMode",
     "Preset",
-    "FaikoutUnit",
-    "FaikoutController",
 ]
