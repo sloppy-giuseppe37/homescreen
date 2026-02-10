@@ -5,6 +5,7 @@ description = "Pythonic MQTT API for Faikout (Daikin AC) devices"
 requires-python = ">=3.10"
 dependencies = [
     "gmqtt>=0.7.0",
+    "rich>=13.0",
 ]
 
 [project.optional-dependencies]
