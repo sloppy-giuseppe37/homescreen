@@ -1,0 +1,15 @@
+[Unit]
+Description=Home Control Web Server
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=exedev
+WorkingDirectory=/home/exedev/homescreen
+ExecStart=/home/exedev/homescreen/homescreen
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

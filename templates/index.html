@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="light dark">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Home Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.344.0/font/lucide.min.css" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      touch-action: manipulation;
+      -webkit-text-size-adjust: 100%;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    :root {
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.15);
+      --off: #d1d5db;
+      --warm: #f59e0b;
+      --warm-glow: rgba(245,158,11,0.15);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --card: #1f2937;
+        --text: #f3f4f6;
+        --text-muted: #9ca3af;
+        --border: #374151;
+        --off: #4b5563;
+      }
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .shell {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 16px 32px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 24px 0 20px;
+    }
+    header .icon-house { font-size: 26px; color: var(--accent); }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+
+    /* ── Connection status ── */
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #ef4444;
+      margin-left: auto;
+      transition: background 0.3s;
+    }
+    .status-dot.connected { background: #22c55e; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 4px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 0;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn i { font-size: 18px; }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+    }
+    .tab-btn.active.heating-active {
+      background: var(--warm);
+      box-shadow: 0 2px 8px rgba(245,158,11,0.35);
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Toggle Switch ── */
+    .room-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+    }
+    .room-row + .room-row { border-top: 1px solid var(--border); }
+    .room-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .room-label i {
+      font-size: 20px;
+      color: var(--text-muted);
+      transition: color 0.3s;
+    }
+    .room-label i.lit { color: var(--warm); }
+    .room-label i.heated { color: #ef4444; }
+
+    .toggle {
+      position: relative;
+      width: 52px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--off);
+      border-radius: 30px;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+    .toggle .slider::before {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 24px; height: 24px;
+      background: var(--card);
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      transition: transform 0.25s;
+    }
+    .toggle input:checked + .slider { background: var(--accent); }
+    #lights .toggle input:checked + .slider { background: var(--warm); }
+    .toggle input:checked + .slider::before { transform: translateX(22px); }
+    .toggle.warm input:checked + .slider { background: var(--warm); }
+
+    /* ── Temperature Control ── */
+    .temp-control {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0 20px;
+    }
+    .temp-display {
+      font-size: 52px;
+      font-weight: 700;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .temp-display .unit {
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--text-muted);
+      vertical-align: super;
+    }
+    .temp-range-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .temp-range-row span {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Range slider */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--border);
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--warm);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+      border: 3px solid var(--card);
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--warm);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+      border: 3px solid var(--card);
+    }
+
+    /* ── Advanced Drawer ── */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-header .card-title { margin-bottom: 0; }
+    .drawer-toggle {
+      background: none;
+      border: none;
+      padding: 8px; margin: -8px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: transform 0.25s;
+      font-size: 0;
+    }
+    .drawer-toggle.open { transform: rotate(180deg); }
+    .drawer-toggle svg { width: 16px; height: 16px; display: block; }
+    .drawer {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.25s ease;
+    }
+    .drawer.open { grid-template-rows: 1fr; }
+    .drawer-inner { overflow: hidden; }
+    .drawer .room-row:first-child { border-top: 1px solid var(--border); }
+
+    @media (min-width: 500px) {
+      .shell { padding: 0 24px 40px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+  <header>
+    <i class="icon-house"></i>
+    <h1>Home Control</h1>
+    <div class="status-dot" id="status-dot" title="Disconnected"></div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="lights">
+      <i class="icon-lightbulb"></i> Lights
+    </button>
+    <button class="tab-btn" data-tab="heating">
+      <i class="icon-flame"></i> Heating
+    </button>
+  </div>
+
+  <!-- ═══ LIGHTS TAB ═══ -->
+  <div id="lights" class="tab-panel active">
+    {{range $zone := .Zones}}{{if $zone.Lights}}
+    <div class="card">
+      <div class="card-title">{{$zone.Name}}</div>
+      {{range $zone.Lights}}
+      <div class="room-row" data-light-zone="{{$zone.Name}}" data-light-name="{{.Name}}">
+        <span class="room-label"><i class="icon-lamp"></i> {{.Name}}</span>
+        <label class="toggle"><input type="checkbox" data-light="{{.Name}}" data-zone="{{$zone.Name}}"><span class="slider"></span></label>
+      </div>
+      {{end}}
+    </div>
+    {{end}}{{end}}
+  </div>
+
+  <!-- ═══ HEATING TAB ═══ -->
+  <div id="heating" class="tab-panel">
+    {{range $zone := .Zones}}{{if $zone.Heating}}
+    <div class="card" data-heating-zone="{{$zone.Name}}">
+      <div class="card-header">
+        <div class="card-title">{{$zone.Name}}</div>
+        <button class="drawer-toggle" aria-label="Advanced settings">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
+        </button>
+      </div>
+      <div class="drawer">
+        <div class="drawer-inner">
+          <div class="room-row">
+            <span class="room-label">Quiet</span>
+            <label class="toggle warm"><input type="checkbox" data-quiet-zone="{{$zone.Name}}"><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="temp-control">
+        <div class="temp-display" id="temp-{{$zone.Name}}">20<span class="unit">°C</span></div>
+        <div class="temp-range-row">
+          <span>16°C</span>
+          <input type="range" min="16" max="25" value="20" data-temp-zone="{{$zone.Name}}">
+          <span>25°C</span>
+        </div>
+      </div>
+      {{range $zone.Heating}}
+      <div class="room-row">
+        <span class="room-label"><i class="icon-radiator"></i> {{.Name}}</span>
+        <label class="toggle warm"><input type="checkbox" data-room="{{.Name}}" data-zone="{{$zone.Name}}"><span class="slider"></span></label>
+      </div>
+      {{end}}
+    </div>
+    {{end}}{{end}}
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Home Control — Frontend JavaScript
+//
+// This code:
+//   1. Connects to the server via SSE to receive live state
+//   2. Sends POST requests when the user interacts with controls
+//   3. Computes zone-level values (temperature, quiet) from
+//      per-room state received via SSE
+// ============================================================
+
+// --- State ---
+// We keep a local mirror of the state received from the server.
+// Key structure: state.heating[zone][room] = {power, target_temp, quiet}
+//                state.lights[zone][name]  = {on}
+const state = {
+  heating: {},
+  lights: {}
+};
+
+// --- SSE Connection ---
+// EventSource automatically reconnects if the connection drops.
+let evtSource = null;
+
+function connectSSE() {
+  evtSource = new EventSource('/api/events');
+
+  evtSource.onopen = () => {
+    document.getElementById('status-dot').classList.add('connected');
+    document.getElementById('status-dot').title = 'Connected';
+  };
+
+  evtSource.onerror = () => {
+    document.getElementById('status-dot').classList.remove('connected');
+    document.getElementById('status-dot').title = 'Disconnected';
+  };
+
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'heating') {
+      // Store per-room heating state
+      if (!state.heating[data.zone]) state.heating[data.zone] = {};
+      state.heating[data.zone][data.room] = {
+        power: data.power,
+        target_temp: data.target_temp,
+        quiet: data.quiet
+      };
+      updateHeatingUI(data.zone);
+      updateRoomToggle(data.zone, data.room, data.power);
+    }
+    else if (data.type === 'light') {
+      // Store per-light state
+      if (!state.lights[data.zone]) state.lights[data.zone] = {};
+      state.lights[data.zone][data.name] = { on: data.on };
+      updateLightUI(data.zone, data.name, data.on);
+    }
+  };
+}
+
+// --- UI Update Functions ---
+
+// Update the zone-level temperature display and quiet toggle
+// based on the per-room state.
+function updateHeatingUI(zoneName) {
+  const rooms = state.heating[zoneName];
+  if (!rooms) return;
+
+  const roomList = Object.values(rooms);
+  if (roomList.length === 0) return;
+
+  // Temperature: show the HIGHEST target temp in the zone
+  const maxTemp = Math.max(...roomList.map(r => r.target_temp));
+
+  // Quiet: show ON only if ALL rooms have quiet on
+  const allQuiet = roomList.every(r => r.quiet);
+
+  // Update temperature slider and display
+  // (but only if the user isn't currently dragging the slider)
+  const slider = document.querySelector(`input[data-temp-zone="${zoneName}"]`);
+  const display = document.getElementById(`temp-${zoneName}`);
+  if (slider && !slider.matches(':active')) {
+    const rounded = Math.round(maxTemp);
+    slider.value = rounded;
+    updateSliderTrack(slider);
+    if (display) {
+      display.innerHTML = rounded + '<span class="unit">°C</span>';
+    }
+  }
+
+  // Update quiet toggle
+  const quietToggle = document.querySelector(`input[data-quiet-zone="${zoneName}"]`);
+  if (quietToggle) {
+    quietToggle.checked = allQuiet;
+  }
+}
+
+// Update a single room's power toggle in the heating tab
+function updateRoomToggle(zoneName, roomName, power) {
+  const toggle = document.querySelector(
+    `input[data-room="${roomName}"][data-zone="${zoneName}"]`
+  );
+  if (toggle) {
+    toggle.checked = power;
+    // Update the icon glow
+    const icon = toggle.closest('.room-row')?.querySelector('i');
+    if (icon) icon.classList.toggle('heated', power);
+  }
+}
+
+// Update a single light's toggle
+function updateLightUI(zoneName, lightName, on) {
+  const toggle = document.querySelector(
+    `input[data-light="${lightName}"][data-zone="${zoneName}"]`
+  );
+  if (toggle) {
+    toggle.checked = on;
+    const icon = toggle.closest('.room-row')?.querySelector('i');
+    if (icon) icon.classList.toggle('lit', on);
+  }
+}
+
+// Color the range slider track proportionally
+function updateSliderTrack(slider) {
+  const pct = ((slider.value - 16) / 9) * 100;
+  const trackBg = getComputedStyle(document.documentElement)
+    .getPropertyValue('--border').trim();
+  slider.style.background =
+    `linear-gradient(to right, #f59e0b ${pct}%, ${trackBg} ${pct}%)`;
+}
+
+// --- API Helpers ---
+
+// Send a POST request with a JSON body to the server.
+// We don't update the UI here — we wait for the SSE event to come back,
+// which keeps all connected browsers in sync.
+function postAPI(url, value) {
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: value })
+  }).catch(err => console.error('API error:', err));
+}
+
+// --- Event Listeners ---
+
+// Temperature sliders: debounce so we don't flood MQTT while dragging
+const tempTimers = {};  // one timer per zone
+
+document.querySelectorAll('input[data-temp-zone]').forEach(slider => {
+  const zone = slider.dataset.tempZone;
+  const display = document.getElementById(`temp-${zone}`);
+
+  slider.addEventListener('input', () => {
+    // Update display immediately for responsive feel
+    if (display) {
+      display.innerHTML = slider.value + '<span class="unit">°C</span>';
+    }
+    updateSliderTrack(slider);
+
+    // Debounce the API call (300ms after user stops dragging)
+    clearTimeout(tempTimers[zone]);
+    tempTimers[zone] = setTimeout(() => {
+      postAPI(`/api/heating/zone/${encodeURIComponent(zone)}/temperature`,
+              parseInt(slider.value));
+    }, 300);
+  });
+
+  // Initialize track color
+  updateSliderTrack(slider);
+});
+
+// Quiet toggles (zone-level)
+document.querySelectorAll('input[data-quiet-zone]').forEach(toggle => {
+  toggle.addEventListener('change', () => {
+    const zone = toggle.dataset.quietZone;
+    postAPI(`/api/heating/zone/${encodeURIComponent(zone)}/quiet`,
+            toggle.checked);
+  });
+});
+
+// Room power toggles (per-room)
+document.querySelectorAll('input[data-room]').forEach(toggle => {
+  toggle.addEventListener('change', () => {
+    const zone = toggle.dataset.zone;
+    const room = toggle.dataset.room;
+    postAPI(`/api/heating/room/${encodeURIComponent(zone)}/${encodeURIComponent(room)}/power`,
+            toggle.checked);
+  });
+});
+
+// Light toggles (per-light)
+document.querySelectorAll('input[data-light]').forEach(toggle => {
+  toggle.addEventListener('change', () => {
+    const zone = toggle.dataset.zone;
+    const name = toggle.dataset.light;
+    postAPI(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(name)}/power`,
+            toggle.checked);
+  });
+});
+
+// --- Tab switching ---
+const tabBtns = document.querySelectorAll('.tab-btn');
+const panels  = document.querySelectorAll('.tab-panel');
+
+function switchTab(tabName) {
+  tabBtns.forEach(b => b.classList.remove('active', 'heating-active'));
+  panels.forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (!btn) return;
+  btn.classList.add('active');
+  if (tabName === 'heating') btn.classList.add('heating-active');
+  document.getElementById(tabName).classList.add('active');
+  localStorage.setItem('activeTab', tabName);
+}
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+const savedTab = localStorage.getItem('activeTab');
+if (savedTab && document.getElementById(savedTab)) switchTab(savedTab);
+
+// --- Advanced drawers ---
+document.querySelectorAll('.drawer-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('open');
+    btn.closest('.card').querySelector('.drawer').classList.toggle('open');
+  });
+});
+
+// --- Prevent iOS zoom ---
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+document.addEventListener('touchmove', e => {
+  if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+
+// --- Start SSE ---
+connectSSE();
+</script>
+</body>
+</html>
