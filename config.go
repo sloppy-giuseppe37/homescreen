@@ -4,7 +4,9 @@ package main
 //   - Where the MQTT broker is
 //   - What zones/rooms/lights exist and their MQTT topic mappings
 //
-// The config file lives at ~/.config/homescreen/config.yaml
+// Config is searched in order:
+//   1. ~/.config/homescreen/config.yaml  (user-level, for dev/desktop)
+//   2. /etc/homescreen.yaml              (system-level, for Docker/servers)
 
 import (
 	"fmt"
@@ -58,32 +60,56 @@ func (r HeatingRoom) HeatingTopics() (power, temp, quiet string) {
 }
 
 // LoadConfig reads and parses the YAML config file.
-// It looks in ~/.config/homescreen/config.yaml by default.
+// It searches these paths in order and uses the first one found:
+//   1. ~/.config/homescreen/config.yaml
+//   2. /etc/homescreen.yaml
 func LoadConfig() (*Config, error) {
-	// Find the user's home directory
-	home, err := os.UserHomeDir()
+	path, err := findConfigFile()
 	if err != nil {
-		return nil, fmt.Errorf("cannot find home directory: %w", err)
+		return nil, err
 	}
+	return LoadConfigFrom(path)
+}
 
-	path := filepath.Join(home, ".config", "homescreen", "config.yaml")
-
-	// Read the file
+// LoadConfigFrom reads and parses a YAML config file at a specific path.
+func LoadConfigFrom(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read config file %s: %w", path, err)
 	}
 
-	// Parse YAML into our Config struct
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("cannot parse config file: %w", err)
 	}
 
-	// Validate: broker must be set
 	if cfg.MQTT.Broker == "" {
 		return nil, fmt.Errorf("mqtt.broker must be set in config")
 	}
 
 	return &cfg, nil
+}
+
+// findConfigFile returns the path to the first config file found.
+// Search order: ~/.config/homescreen/config.yaml, /etc/homescreen.yaml
+func findConfigFile() (string, error) {
+	// Build the list of candidate paths
+	var candidates []string
+
+	// 1. User-level config (may fail if HOME is unset, that's fine)
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".config", "homescreen", "config.yaml"))
+	}
+
+	// 2. System-level config (good for Docker / servers)
+	candidates = append(candidates, "/etc/homescreen.yaml")
+
+	// Return the first one that exists
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+
+	return "", fmt.Errorf("no config file found; searched: %v", candidates)
 }

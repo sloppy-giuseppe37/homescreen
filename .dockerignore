@@ -1,0 +1,7 @@
+# Don't send these to the Docker build context
+homescreen
+*.service
+.git
+.gitignore
+.dockerignore
+Dockerfile

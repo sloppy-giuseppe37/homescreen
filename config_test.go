@@ -108,6 +108,26 @@ func TestLoadConfig_MissingFile(t *testing.T) {
 	}
 }
 
+// TestLoadConfigFrom_Direct verifies LoadConfigFrom reads a specific path.
+func TestLoadConfigFrom_Direct(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
+	yaml := `
+mqtt:
+  broker: "tcp://direct:1883"
+zones:
+  - name: TestZone
+`
+	os.WriteFile(tmpFile, []byte(yaml), 0644)
+
+	cfg, err := LoadConfigFrom(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadConfigFrom() error: %v", err)
+	}
+	if cfg.MQTT.Broker != "tcp://direct:1883" {
+		t.Errorf("broker = %q, want %q", cfg.MQTT.Broker, "tcp://direct:1883")
+	}
+}
+
 // TestLoadConfig_MissingBroker verifies we reject a config
 // that has no broker specified.
 func TestLoadConfig_MissingBroker(t *testing.T) {
