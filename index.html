@@ -454,16 +454,25 @@
   const tabBtns = document.querySelectorAll('.tab-btn');
   const panels  = document.querySelectorAll('.tab-panel');
 
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabBtns.forEach(b => b.classList.remove('active', 'heating-active'));
-      panels.forEach(p => p.classList.remove('active'));
+  function switchTab(tabName) {
+    tabBtns.forEach(b => b.classList.remove('active', 'heating-active'));
+    panels.forEach(p => p.classList.remove('active'));
 
-      btn.classList.add('active');
-      if (btn.dataset.tab === 'heating') btn.classList.add('heating-active');
-      document.getElementById(btn.dataset.tab).classList.add('active');
-    });
+    const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+    if (!btn) return;
+    btn.classList.add('active');
+    if (tabName === 'heating') btn.classList.add('heating-active');
+    document.getElementById(tabName).classList.add('active');
+    localStorage.setItem('activeTab', tabName);
+  }
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
+
+  // Restore saved tab on load
+  const savedTab = localStorage.getItem('activeTab');
+  if (savedTab && document.getElementById(savedTab)) switchTab(savedTab);
 
   // ── Temperature sliders ──
   document.querySelectorAll('input[type=range]').forEach(slider => {
