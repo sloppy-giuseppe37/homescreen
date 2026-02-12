@@ -28,6 +28,14 @@ type App struct {
 	Template    *template.Template
 }
 
+// PageData is the data passed to the HTML template.
+// It includes the config (for rendering zones/rooms) plus a JSON snapshot
+// of current state, so the page renders correctly without waiting for SSE.
+type PageData struct {
+	*Config
+	InitialState string // JSON array of state events, safe to embed in <script>
+}
+
 // SetupRoutes registers all HTTP routes on the given ServeMux.
 func (app *App) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", app.handleIndex)
@@ -41,14 +49,37 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 // ---------- Page handler ----------
 
 // handleIndex renders the main HTML page.
-// The page is a Go template that receives the zone/room config,
-// so the HTML is always in sync with config.yaml.
+// The page is a Go template that receives the zone/room config
+// plus a JSON snapshot of current device state. This means the page
+// renders with correct values immediately — no flash of defaults
+// while waiting for the SSE connection to deliver state.
 func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := app.Template.Execute(w, app.Config); err != nil {
+	data := PageData{
+		Config:       app.Config,
+		InitialState: app.buildSnapshot(),
+	}
+	if err := app.Template.Execute(w, data); err != nil {
 		log.Printf("template error: %v", err)
 		http.Error(w, "Internal Server Error", 500)
 	}
+}
+
+// buildSnapshot returns a JSON array string containing one event object
+// per heating room and per light — the same format as SSE events.
+// This is embedded in the HTML so the browser has state on first paint.
+func (app *App) buildSnapshot() string {
+	var events []json.RawMessage
+	for _, zone := range app.Config.Zones {
+		for _, room := range zone.Heating {
+			events = append(events, json.RawMessage(app.buildHeatingEvent(zone.Name, room)))
+		}
+		for _, light := range zone.Lights {
+			events = append(events, json.RawMessage(app.buildLightEvent(zone.Name, light)))
+		}
+	}
+	data, _ := json.Marshal(events)
+	return string(data)
 }
 
 // ---------- SSE handler ----------

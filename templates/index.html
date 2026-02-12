@@ -592,7 +592,31 @@ document.addEventListener('touchmove', e => {
   if (e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
+// --- Apply initial state embedded in the page ---
+// The server embeds a JSON snapshot of all current device state
+// directly in the HTML. We apply it immediately so the UI shows
+// correct values on first paint, before SSE is even connected.
+// This eliminates the "flash of default state" on page load.
+const initialState = {{.InitialState}};
+initialState.forEach(data => {
+  if (data.type === 'heating') {
+    if (!state.heating[data.zone]) state.heating[data.zone] = {};
+    state.heating[data.zone][data.room] = {
+      power: data.power,
+      target_temp: data.target_temp,
+      quiet: data.quiet
+    };
+    updateHeatingUI(data.zone);
+    updateRoomToggle(data.zone, data.room, data.power);
+  } else if (data.type === 'light') {
+    if (!state.lights[data.zone]) state.lights[data.zone] = {};
+    state.lights[data.zone][data.name] = { on: data.on };
+    updateLightUI(data.zone, data.name, data.on);
+  }
+});
+
 // --- Start SSE ---
+// SSE takes over from here — any changes after page load arrive as events.
 connectSSE();
 </script>
 </body>

@@ -157,6 +157,85 @@ func TestHandleIndex(t *testing.T) {
 	}
 }
 
+// TestHandleIndex_InitialState verifies that the page embeds a JSON
+// snapshot of current MQTT state, so the browser doesn't flash defaults.
+func TestHandleIndex_InitialState(t *testing.T) {
+	// Pre-populate the MQTT cache with known values
+	app := testApp(map[string]string{
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "1",
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "23.0",
+		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "1",
+		"lights/bedroom": "1",
+	})
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+
+	// The rendered HTML should contain the inline initial state
+	if !strings.Contains(body, "const initialState = [") {
+		t.Error("page missing initialState JSON")
+	}
+
+	// Verify specific values are embedded (not the defaults)
+	if !strings.Contains(body, `"target_temp":23`) {
+		t.Error("initial state missing target_temp 23")
+	}
+	if !strings.Contains(body, `"power":true`) {
+		t.Error("initial state missing power:true")
+	}
+	if !strings.Contains(body, `"quiet":true`) {
+		t.Error("initial state missing quiet:true")
+	}
+}
+
+// TestBuildSnapshot verifies the snapshot contains events for all rooms and lights.
+func TestBuildSnapshot(t *testing.T) {
+	app := testApp(map[string]string{
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature": "22.0",
+		"lights/kitchen": "1",
+	})
+
+	snapshot := app.buildSnapshot()
+
+	// Parse the snapshot JSON
+	var events []map[string]any
+	if err := json.Unmarshal([]byte(snapshot), &events); err != nil {
+		t.Fatalf("invalid snapshot JSON: %v", err)
+	}
+
+	// We have 3 heating rooms + 2 lights = 5 events
+	if len(events) != 5 {
+		t.Errorf("snapshot has %d events, want 5", len(events))
+	}
+
+	// Count types
+	heating, lights := 0, 0
+	for _, e := range events {
+		switch e["type"] {
+		case "heating":
+			heating++
+		case "light":
+			lights++
+		}
+	}
+	if heating != 3 {
+		t.Errorf("snapshot has %d heating events, want 3", heating)
+	}
+	if lights != 2 {
+		t.Errorf("snapshot has %d light events, want 2", lights)
+	}
+}
+
 // TestHandleRoomPower_NotFound tests that a request for a non-existent
 // zone returns 404.
 func TestHandleRoomPower_NotFound(t *testing.T) {
