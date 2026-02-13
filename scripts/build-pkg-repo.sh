@@ -22,6 +22,7 @@ fi
 FLATSIZE=$(stat --printf='%s' "$BINARY")
 
 # --- Stage package contents ---
+# Use absolute paths to match FreeBSD pkg convention.
 PKGDIR=$(mktemp -d)
 trap 'rm -rf "$PKGDIR"' EXIT
 
@@ -83,8 +84,29 @@ RCEOF
 chmod 755 "$PKGDIR/usr/local/etc/rc.d/homescreen"
 
 # --- Build manifests ---
-SHA256=$(sha256sum "$BINARY" | awk '{print $1}')
+BIN_SHA256=$(sha256sum "$PKGDIR/usr/local/bin/homescreen" | awk '{print $1}')
+RCD_SHA256=$(sha256sum "$PKGDIR/usr/local/etc/rc.d/homescreen" | awk '{print $1}')
 
+# +COMPACT_MANIFEST has no files detail
+COMPACT_MANIFEST=$(cat <<EOF
+{
+  "name": "${NAME}",
+  "version": "${VERSION}",
+  "origin": "local/${NAME}",
+  "comment": "Smart home control panel",
+  "desc": "MQTT-backed smart home control panel with web UI and SSE",
+  "maintainer": "homescreen@local",
+  "www": "https://github.com",
+  "abi": "${ABI}",
+  "arch": "freebsd:13:x86:64",
+  "prefix": "${PREFIX}",
+  "flatsize": ${FLATSIZE},
+  "categories": ["local"]
+}
+EOF
+)
+
+# +MANIFEST includes file entries with checksums (matching real FreeBSD pkg format)
 MANIFEST=$(cat <<EOF
 {
   "name": "${NAME}",
@@ -95,28 +117,47 @@ MANIFEST=$(cat <<EOF
   "maintainer": "homescreen@local",
   "www": "https://github.com",
   "abi": "${ABI}",
-  "arch": "${ABI}",
+  "arch": "freebsd:13:x86:64",
   "prefix": "${PREFIX}",
   "flatsize": ${FLATSIZE},
   "categories": ["local"],
   "files": {
-    "${PREFIX}/bin/homescreen": "${SHA256}",
-    "${PREFIX}/etc/rc.d/homescreen": "-"
+    "${PREFIX}/bin/homescreen": {
+      "sum": "1\$${BIN_SHA256}",
+      "uname": "root",
+      "gname": "wheel",
+      "perm": "0555"
+    },
+    "${PREFIX}/etc/rc.d/homescreen": {
+      "sum": "1\$${RCD_SHA256}",
+      "uname": "root",
+      "gname": "wheel",
+      "perm": "0555"
+    }
   }
 }
 EOF
 )
 
-# +COMPACT_MANIFEST is the same as +MANIFEST for simple packages
-echo "$MANIFEST" > "$PKGDIR/+COMPACT_MANIFEST"
+echo "$COMPACT_MANIFEST" > "$PKGDIR/+COMPACT_MANIFEST"
 echo "$MANIFEST" > "$PKGDIR/+MANIFEST"
 
-# --- Build .pkg (tar.zst with manifests first) ---
+# --- Build .pkg (tar.zst with manifests first, absolute paths, no directory entries) ---
 mkdir -p repo
 PKG_FILENAME="${NAME}-${VERSION}.pkg"
 
-# pkg expects manifests at the start of the archive
-(cd "$PKGDIR" && tar cf - +COMPACT_MANIFEST +MANIFEST usr) | zstd -o "repo/${PKG_FILENAME}"
+# pkg expects: manifests first (relative), then files with absolute paths, no directory entries.
+# We use transform to prepend / to file paths while keeping manifests relative.
+tar cf - \
+  --owner=root --group=wheel \
+  -C "$PKGDIR" \
+  +COMPACT_MANIFEST \
+  +MANIFEST \
+  --transform='s|^usr|/usr|' \
+  --no-recursion \
+  usr/local/bin/homescreen \
+  usr/local/etc/rc.d/homescreen \
+  | zstd -o "repo/${PKG_FILENAME}"
 
 PKGSIZE=$(stat --printf='%s' "repo/${PKG_FILENAME}")
 PKGSHA256=$(sha256sum "repo/${PKG_FILENAME}" | awk '{print $1}')
