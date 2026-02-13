@@ -1,0 +1,56 @@
+name: Build FreeBSD pkg repo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build for FreeBSD
+        run: |
+          GOOS=freebsd GOARCH=amd64 go build -o homescreen -trimpath -ldflags='-s -w' .
+
+      - name: Determine version
+        id: version
+        run: |
+          # Epoch seconds ensures pkg always sees a newer version
+          VERSION="0.$(date -u +%Y%m%d%H%M%S)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Build .pkg and repository
+        run: bash scripts/build-pkg-repo.sh "${{ steps.version.outputs.version }}"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
