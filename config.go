@@ -5,8 +5,9 @@ package main
 //   - What zones/rooms/lights exist and their MQTT topic mappings
 //
 // Config is searched in order:
-//   1. ~/.config/homescreen/config.yaml  (user-level, for dev/desktop)
-//   2. /etc/homescreen.yaml              (system-level, for Docker/servers)
+//   1. ~/.config/homescreen/config.yaml       (user-level, for dev/desktop)
+//   2. /usr/local/etc/homescreen.yaml  (FreeBSD pkg convention)
+//   3. /etc/homescreen.yaml                   (system-level, for Docker/servers)
 
 import (
 	"fmt"
@@ -91,7 +92,7 @@ func LoadConfigFrom(path string) (*Config, error) {
 }
 
 // findConfigFile returns the path to the first config file found.
-// Search order: ~/.config/homescreen/config.yaml, /etc/homescreen.yaml
+// Search order: ~/.config/homescreen/config.yaml, /usr/local/etc/homescreen.yaml, /etc/homescreen.yaml
 func findConfigFile() (string, error) {
 	// Build the list of candidate paths
 	var candidates []string
@@ -101,7 +102,10 @@ func findConfigFile() (string, error) {
 		candidates = append(candidates, filepath.Join(home, ".config", "homescreen", "config.yaml"))
 	}
 
-	// 2. System-level config (good for Docker / servers)
+	// 2. FreeBSD pkg convention
+	candidates = append(candidates, "/usr/local/etc/homescreen.yaml")
+
+	// 3. System-level config (good for Docker / servers)
 	candidates = append(candidates, "/etc/homescreen.yaml")
 
 	// Return the first one that exists
