@@ -36,7 +36,7 @@ cat > "$PKGDIR/usr/local/etc/rc.d/homescreen" << 'RCEOF'
 #!/bin/sh
 
 # PROVIDE: homescreen
-# REQUIRE: DAEMON mosquitto
+# REQUIRE: DAEMON NETWORKING
 # KEYWORD: shutdown
 
 . /etc/rc.subr
@@ -48,36 +48,14 @@ load_rc_config $name
 
 : ${homescreen_enable:="NO"}
 : ${homescreen_user:="root"}
+: ${homescreen_config:=""}
 
 pidfile="/var/run/${name}.pid"
-command="/usr/local/bin/homescreen"
-command_args="& echo \$! > ${pidfile}"
+command="/usr/sbin/daemon"
 
-start_cmd="homescreen_start"
-stop_cmd="homescreen_stop"
-status_cmd="homescreen_status"
+homescreen_cmd="/usr/local/bin/${name}"
 
-homescreen_start() {
-  echo "Starting ${name}."
-  /usr/sbin/daemon -p ${pidfile} -u ${homescreen_user} ${command}
-}
-
-homescreen_stop() {
-  if [ -f ${pidfile} ]; then
-    echo "Stopping ${name}."
-    kill $(cat ${pidfile}) 2>/dev/null
-    rm -f ${pidfile}
-  fi
-}
-
-homescreen_status() {
-  if [ -f ${pidfile} ] && kill -0 $(cat ${pidfile}) 2>/dev/null; then
-    echo "${name} is running as pid $(cat ${pidfile})."
-  else
-    echo "${name} is not running."
-    return 1
-  fi
-}
+command_args="-f -p ${pidfile} -t ${name} -u ${homescreen_user} ${homescreen_cmd}"
 
 run_rc_command "$1"
 RCEOF
