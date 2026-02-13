@@ -152,6 +152,29 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.25);
     }
 
+    @media (prefers-color-scheme: dark) {
+      .tabs-inner {
+        background: rgba(31, 41, 55, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.3),
+          0 2px 8px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .tab-btn.active {
+        background: rgba(59, 130, 246, 0.7);
+        box-shadow:
+          0 2px 12px rgba(59, 130, 246, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+      .tab-btn.active.heating-active {
+        background: rgba(244, 169, 66, 0.75);
+        box-shadow:
+          0 2px 12px rgba(245, 158, 11, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+    }
+
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
