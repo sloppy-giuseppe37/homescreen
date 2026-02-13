@@ -59,7 +59,7 @@
     .shell {
       max-width: 480px;
       margin: 0 auto;
-      padding: 0 16px 32px;
+      padding: 0 16px 100px;
     }
 
     /* ── Header ── */
@@ -95,14 +95,24 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Tabs ── */
+    /* ── Tabs (sticky bottom bar) ── */
     .tabs {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 8px);
+      background: var(--bg);
+    }
+    .tabs-inner {
       display: flex;
       background: var(--card);
       border-radius: var(--radius);
       padding: 4px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      box-shadow: 0 -1px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06);
+      max-width: 480px;
+      margin: 0 auto;
     }
     .tab-btn {
       flex: 1;
@@ -297,7 +307,7 @@
     .drawer .room-row:first-child { border-top: 1px solid var(--border); }
 
     @media (min-width: 500px) {
-      .shell { padding: 0 24px 40px; }
+      .shell { padding: 0 24px 100px; }
     }
   </style>
 </head>
@@ -310,16 +320,6 @@
     <h1>Home Control</h1>
 
   </header>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="lights">
-      <i class="icon-lightbulb"></i> Lights
-    </button>
-    <button class="tab-btn" data-tab="heating">
-      <i class="icon-flame"></i> Heating
-    </button>
-  </div>
 
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
@@ -370,6 +370,18 @@
       {{end}}
     </div>
     {{end}}{{end}}
+  </div>
+</div>
+
+<!-- Tabs (sticky bottom bar) -->
+<div class="tabs">
+  <div class="tabs-inner">
+    <button class="tab-btn active" data-tab="lights">
+      <i class="icon-lightbulb"></i> Lights
+    </button>
+    <button class="tab-btn" data-tab="heating">
+      <i class="icon-flame"></i> Heating
+    </button>
   </div>
 </div>
 
