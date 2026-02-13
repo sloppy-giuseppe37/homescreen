@@ -59,7 +59,7 @@
     .shell {
       max-width: 480px;
       margin: 0 auto;
-      padding: 0 16px 100px;
+      padding: 0 16px 72px;
     }
 
     /* ── Header ── */
@@ -95,7 +95,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Tabs (sticky bottom bar) ── */
+    /* ── Tabs (sticky bottom bar · liquid glass) ── */
     .tabs {
       position: fixed;
       bottom: 0;
@@ -103,16 +103,22 @@
       right: 0;
       z-index: 100;
       padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 8px);
-      background: var(--bg);
+      background: transparent;
     }
     .tabs-inner {
       display: flex;
-      background: var(--card);
-      border-radius: var(--radius);
       padding: 4px;
-      box-shadow: 0 -1px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06);
       max-width: 480px;
       margin: 0 auto;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.45);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.08),
+        0 2px 8px rgba(0, 0, 0, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
     }
     .tab-btn {
       flex: 1;
@@ -129,17 +135,21 @@
       font-weight: 600;
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.25s ease;
     }
     .tab-btn i { font-size: 18px; }
     .tab-btn.active {
-      background: var(--accent);
+      background: rgba(59, 130, 246, 0.8);
       color: #fff;
-      box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+      box-shadow:
+        0 2px 12px rgba(59, 130, 246, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
     }
     .tab-btn.active.heating-active {
-      background: var(--warm);
-      box-shadow: 0 2px 8px rgba(245,158,11,0.35);
+      background: rgba(244, 169, 66, 0.85);
+      box-shadow:
+        0 2px 12px rgba(245, 158, 11, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
     }
 
     .tab-panel { display: none; }
@@ -307,7 +317,7 @@
     .drawer .room-row:first-child { border-top: 1px solid var(--border); }
 
     @media (min-width: 500px) {
-      .shell { padding: 0 24px 100px; }
+      .shell { padding: 0 24px 72px; }
     }
   </style>
 </head>
