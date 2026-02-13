@@ -7,6 +7,7 @@ package main
 
 import (
 	"embed"
+	"io/fs"
 	"text/template"
 	"log"
 	"net/http"
@@ -20,6 +21,9 @@ import (
 //
 //go:embed templates/index.html
 var templateFS embed.FS
+
+//go:embed static
+var staticFS embed.FS
 
 func main() {
 	// --- Load configuration ---
@@ -70,6 +74,13 @@ func main() {
 	// --- Set up HTTP routes ---
 	mux := http.NewServeMux()
 	app.SetupRoutes(mux)
+
+	// Serve vendored static assets (fonts, CSS)
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatalf("Failed to create static sub-fs: %v", err)
+	}
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 
 	// --- Start the server ---
 	addr := ":8000"
