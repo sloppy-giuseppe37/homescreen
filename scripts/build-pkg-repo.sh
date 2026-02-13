@@ -9,7 +9,7 @@ set -euo pipefail
 
 VERSION="${1:?Usage: build-pkg-repo.sh <version>}"
 NAME="homescreen"
-ABI="FreeBSD:14:amd64"
+ABI="FreeBSD:13:amd64"
 PREFIX="/usr/local"
 BINARY="homescreen"   # must already be built for FreeBSD
 
