@@ -123,36 +123,47 @@ PKGSHA256=$(sha256sum "repo/${PKG_FILENAME}" | awk '{print $1}')
 
 echo "Built repo/${PKG_FILENAME} (${PKGSIZE} bytes)"
 
-# --- Build repository catalog ---
-# packagesite.yaml: one JSON object per line
-PACKAGESITE=$(cat <<EOF
+# --- Build repository catalogs ---
+# Package entry shared by both formats
+PKG_ENTRY=$(cat <<EOF
 {"name":"${NAME}","version":"${VERSION}","origin":"local/${NAME}","comment":"Smart home control panel","desc":"MQTT-backed smart home control panel with web UI and SSE","maintainer":"homescreen@local","www":"https://github.com","abi":"${ABI}","arch":"${ABI}","prefix":"${PREFIX}","flatsize":${FLATSIZE},"pkgsize":${PKGSIZE},"sum":"${PKGSHA256}","path":"${PKG_FILENAME}","repopath":"${PKG_FILENAME}","categories":["local"]}
 EOF
 )
 
-# Create catalog content and sign it.
-# IMPORTANT: pkg expects the tar entry to be named "data" (not "packagesite.yaml")
-# because repo->meta->data defaults to "data" in pkg's meta handling.
+sign_catalog() {
+  local content_file="$1"
+  local out_sig="$2"
+  # FreeBSD pkg verification protocol (ossl_verify_cert_cb):
+  #   1. hex_sha256 = SHA256_HEX(content)
+  #   2. hash = SHA256_RAW(hex_sha256)
+  #   3. EVP_PKEY_verify(ctx, sig, hash, 32) with md=SHA256
+  local hex
+  hex=$(sha256sum "$content_file" | awk '{print $1}')
+  echo -n "$hex" | openssl dgst -sha256 -binary > "${content_file}.hash"
+  openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "${content_file}.hash" \
+    -pkeyopt digest:sha256 -out "$out_sig"
+  rm "${content_file}.hash"
+}
+
 TMPCAT=$(mktemp -d)
-echo "$PACKAGESITE" > "$TMPCAT/data"
 
-# Sign the catalog to match FreeBSD pkg's verification protocol.
-# pkg verifies via ossl_verify_cert_cb which does:
-#   1. hex_sha256 = SHA256_HEX(content)
-#   2. hash = SHA256_RAW(hex_sha256)   (raw 32-byte hash of the hex string)
-#   3. EVP_PKEY_verify(ctx, sig, siglen, hash, 32)  with md=SHA256
-# So the signature must be PKCS1v15(SHA256_DigestInfo || SHA256(SHA256_HEX(content))).
-HEX_SHA256=$(sha256sum "$TMPCAT/data" | awk '{print $1}')
-echo -n "$HEX_SHA256" | openssl dgst -sha256 -binary > "$TMPCAT/hash"
-openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "$TMPCAT/hash" \
-  -pkeyopt digest:sha256 -out "$TMPCAT/signature"
-rm "$TMPCAT/hash"
-echo "Signed data catalog with $SIGNING_KEY"
+# data.pkg — pkg 2.x format: JSON object with "packages" array.
+# Entry name inside tar must be "data" (repo->meta->data default).
+cat > "$TMPCAT/data" <<EOF
+{"packages":[${PKG_ENTRY}]}
+EOF
+sign_catalog "$TMPCAT/data" "$TMPCAT/signature"
+(cd "$TMPCAT" && tar cf - data signature) | zstd -o repo/data.pkg
+rm "$TMPCAT/data" "$TMPCAT/signature"
+echo "Built and signed data.pkg (v2 format)"
 
-(cd "$TMPCAT" && tar cf - data signature) | zstd -o repo/packagesite.pkg
-
-# data.pkg is a copy used by some pkg versions
-cp repo/packagesite.pkg repo/data.pkg
+# packagesite.pkg — legacy format: one JSON object per line.
+# Entry name inside tar must be "packagesite.yaml" (repo->meta->manifests default).
+echo "$PKG_ENTRY" > "$TMPCAT/packagesite.yaml"
+sign_catalog "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
+(cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o repo/packagesite.pkg
+rm "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
+echo "Built and signed packagesite.pkg (legacy format)"
 
 # meta.conf
 cat > repo/meta.conf << 'METAEOF'
