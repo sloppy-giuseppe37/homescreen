@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // SSEBroadcaster manages all connected SSE clients.
@@ -99,12 +100,24 @@ func (b *SSEBroadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request, sendS
 	sendSnapshot(ch)
 	flusher.Flush()
 
+	// Send a heartbeat comment every 15 seconds to keep the connection
+	// alive through proxies and mobile network managers that kill idle
+	// TCP connections.
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
 	// Stream updates until the client disconnects
 	for {
 		select {
 		case msg := <-ch:
 			// Write SSE format: "data: {json}\n\n"
 			fmt.Fprintf(w, "data: %s\n\n", msg)
+			flusher.Flush()
+
+		case <-heartbeat.C:
+			// SSE comment line — ignored by EventSource but keeps the
+			// TCP connection alive.
+			fmt.Fprintf(w, ": heartbeat\n\n")
 			flusher.Flush()
 
 		case <-r.Context().Done():
