@@ -384,7 +384,7 @@ func TestE2E_IndexPage(t *testing.T) {
 		"data-light",          // light toggle
 		"connectSSE",          // SSE connection function
 		"EventSource",         // SSE API usage
-		"status-dot",          // connection indicator
+		"connection-overlay",   // connection overlay
 		"Upstairs",            // zone from config
 		"Downstairs",          // zone from config
 		"Bedroom",             // room from config

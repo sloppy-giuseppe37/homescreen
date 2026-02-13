@@ -67,14 +67,28 @@
     header .icon-house { font-size: 26px; color: var(--accent); }
     header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
 
-    /* ── Connection status ── */
-    .status-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #ef4444;
-      margin-left: auto;
-      transition: background 0.3s;
+    /* ── Connection overlay ── */
+    .connection-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(255,255,255,0.7);
+      align-items: center;
+      justify-content: center;
     }
-    .status-dot.connected { background: #22c55e; }
+    .connection-overlay.visible { display: flex; }
+    @media (prefers-color-scheme: dark) {
+      .connection-overlay { background: rgba(0,0,0,0.6); }
+    }
+    .connection-overlay .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ── Tabs ── */
     .tabs {
@@ -283,12 +297,13 @@
   </style>
 </head>
 <body>
+<div class="connection-overlay" id="connection-overlay"><div class="spinner"></div></div>
 
 <div class="shell">
   <header>
     <i class="icon-house"></i>
     <h1>Home Control</h1>
-    <div class="status-dot" id="status-dot" title="Disconnected"></div>
+
   </header>
 
   <!-- Tabs -->
@@ -377,17 +392,34 @@ const state = {
 // EventSource automatically reconnects if the connection drops.
 let evtSource = null;
 
+let _overlayTimer = null;
+let _refreshTimer = null;
+
+function sseDisconnected() {
+  if (_overlayTimer) return; // already waiting
+  _overlayTimer = setTimeout(() => {
+    document.getElementById('connection-overlay').classList.add('visible');
+    _refreshTimer = setTimeout(() => location.reload(), 5000);
+  }, 350);
+}
+
+function sseConnected() {
+  clearTimeout(_overlayTimer);
+  clearTimeout(_refreshTimer);
+  _overlayTimer = null;
+  _refreshTimer = null;
+  document.getElementById('connection-overlay').classList.remove('visible');
+}
+
 function connectSSE() {
   evtSource = new EventSource('/api/events');
 
   evtSource.onopen = () => {
-    document.getElementById('status-dot').classList.add('connected');
-    document.getElementById('status-dot').title = 'Connected';
+    sseConnected();
   };
 
   evtSource.onerror = () => {
-    document.getElementById('status-dot').classList.remove('connected');
-    document.getElementById('status-dot').title = 'Disconnected';
+    sseDisconnected();
   };
 
   evtSource.onmessage = (e) => {
