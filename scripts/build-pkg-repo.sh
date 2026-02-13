@@ -130,9 +130,11 @@ PACKAGESITE=$(cat <<EOF
 EOF
 )
 
-# Create packagesite.yaml, sign it, and compress
+# Create catalog content and sign it.
+# IMPORTANT: pkg expects the tar entry to be named "data" (not "packagesite.yaml")
+# because repo->meta->data defaults to "data" in pkg's meta handling.
 TMPCAT=$(mktemp -d)
-echo "$PACKAGESITE" > "$TMPCAT/packagesite.yaml"
+echo "$PACKAGESITE" > "$TMPCAT/data"
 
 # Sign the catalog to match FreeBSD pkg's verification protocol.
 # pkg verifies via ossl_verify_cert_cb which does:
@@ -140,14 +142,14 @@ echo "$PACKAGESITE" > "$TMPCAT/packagesite.yaml"
 #   2. hash = SHA256_RAW(hex_sha256)   (raw 32-byte hash of the hex string)
 #   3. EVP_PKEY_verify(ctx, sig, siglen, hash, 32)  with md=SHA256
 # So the signature must be PKCS1v15(SHA256_DigestInfo || SHA256(SHA256_HEX(content))).
-HEX_SHA256=$(sha256sum "$TMPCAT/packagesite.yaml" | awk '{print $1}')
+HEX_SHA256=$(sha256sum "$TMPCAT/data" | awk '{print $1}')
 echo -n "$HEX_SHA256" | openssl dgst -sha256 -binary > "$TMPCAT/hash"
 openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "$TMPCAT/hash" \
   -pkeyopt digest:sha256 -out "$TMPCAT/signature"
 rm "$TMPCAT/hash"
-echo "Signed packagesite.yaml with $SIGNING_KEY"
+echo "Signed data catalog with $SIGNING_KEY"
 
-(cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o repo/packagesite.pkg
+(cd "$TMPCAT" && tar cf - data signature) | zstd -o repo/packagesite.pkg
 
 # data.pkg is a copy used by some pkg versions
 cp repo/packagesite.pkg repo/data.pkg
