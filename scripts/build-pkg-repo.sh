@@ -135,7 +135,12 @@ TMPCAT=$(mktemp -d)
 echo "$PACKAGESITE" > "$TMPCAT/packagesite.yaml"
 
 # Sign the catalog with RSA + SHA256
-openssl dgst -sha256 -sign "$SIGNING_KEY" -out "$TMPCAT/signature" "$TMPCAT/packagesite.yaml"
+# pkg verifies by computing SHA256(content) then passing that hash to
+# EVP_DigestVerify (which internally hashes again). So we must sign the
+# SHA256 of the content, not the content directly — matching the double-hash.
+openssl dgst -sha256 -binary "$TMPCAT/packagesite.yaml" > "$TMPCAT/hash"
+openssl dgst -sha256 -sign "$SIGNING_KEY" -out "$TMPCAT/signature" "$TMPCAT/hash"
+rm "$TMPCAT/hash"
 echo "Signed packagesite.yaml with $SIGNING_KEY"
 
 (cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o repo/packagesite.pkg
