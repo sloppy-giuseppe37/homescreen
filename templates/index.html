@@ -398,20 +398,30 @@ const state = {
 let evtSource = null;
 
 let _overlayTimer = null;
+let _reloadTimer = null;
 let _wasDisconnected = false;
 
 function sseDisconnected() {
   if (_overlayTimer) return; // already waiting
-  // Show spinner after a short grace period (avoids flashing on brief blips)
+  // Show spinner after a short grace period (avoids flashing on brief blips).
   _overlayTimer = setTimeout(() => {
     _wasDisconnected = true;
     document.getElementById('connection-overlay').classList.add('visible');
+    // After 3 more seconds, close SSE and reload. If the server is still
+    // down, the service worker intercepts the failed navigation and serves
+    // the offline skeleton page. If the server is back, we get fresh state.
+    _reloadTimer = setTimeout(() => {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      location.reload();
+    }, 3000);
   }, 350);
 }
 
 function sseConnected() {
   clearTimeout(_overlayTimer);
+  clearTimeout(_reloadTimer);
   _overlayTimer = null;
+  _reloadTimer = null;
   // If we were visibly disconnected, reload to get fresh HTML/state.
   // The server is confirmed up (SSE just connected), so this is safe.
   if (_wasDisconnected) {
