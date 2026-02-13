@@ -1,2 +1,5 @@
 # Built binary
 homescreen
+
+# Cross-compiled binaries
+dist/
