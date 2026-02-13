@@ -310,7 +310,20 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 		val = "1"
 	}
 
-	powerTopic, _, _ := room.HeatingTopics()
+	powerTopic, tempTopic, _ := room.HeatingTopics()
+
+	// When turning ON, publish the target temperature first so the unit
+	// starts at the correct setpoint rather than whatever stale value
+	// it had from before.
+	if val == "1" {
+		if cached, ok := app.MQTT.GetValue(tempTopic); ok && cached != "" {
+			if err := app.MQTT.Publish(tempTopic, cached); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
 	if err := app.MQTT.Publish(powerTopic, val); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

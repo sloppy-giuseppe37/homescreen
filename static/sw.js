@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homecontrol-v2';
+const CACHE_NAME = 'homecontrol-v3';
 const OFFLINE_URL = '/static/offline.html';
 
 // Assets to pre-cache for offline support

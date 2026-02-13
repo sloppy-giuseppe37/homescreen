@@ -461,8 +461,11 @@ function updateHeatingUI(zoneName) {
   const roomList = Object.values(rooms);
   if (roomList.length === 0) return;
 
-  // Temperature: show the HIGHEST target temp in the zone
-  const maxTemp = Math.max(...roomList.map(r => r.target_temp));
+  // Temperature: show the HIGHEST target temp among powered-on rooms.
+  // If no rooms are on, fall back to highest across all rooms.
+  const onRooms = roomList.filter(r => r.power);
+  const consideredRooms = onRooms.length > 0 ? onRooms : roomList;
+  const maxTemp = Math.max(...consideredRooms.map(r => r.target_temp));
 
   // Quiet: show ON only if ALL rooms have quiet on
   const allQuiet = roomList.every(r => r.quiet);
