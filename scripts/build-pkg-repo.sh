@@ -48,14 +48,11 @@ load_rc_config $name
 
 : ${homescreen_enable:="NO"}
 : ${homescreen_user:="root"}
-: ${homescreen_config:=""}
 
 pidfile="/var/run/${name}.pid"
+procname="/usr/local/bin/${name}"
 command="/usr/sbin/daemon"
-
-homescreen_cmd="/usr/local/bin/${name}"
-
-command_args="-f -p ${pidfile} -t ${name} -u ${homescreen_user} ${homescreen_cmd}"
+command_args="-f -S -p ${pidfile} -t ${name} -u ${homescreen_user} ${procname}"
 
 run_rc_command "$1"
 RCEOF
