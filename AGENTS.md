@@ -13,21 +13,30 @@ Browser —POST→ Go server —publish→ Mosquitto broker
 
 The server subscribes to all relevant MQTT topics on startup, keeps an in-memory cache of latest values, and pushes changes to browsers via SSE. It does not persist any state to disk.
 
+The app is an installable PWA with offline support. Static assets (fonts, icons, CSS) are vendored and embedded in the binary. A service worker pre-caches the offline skeleton page and static assets.
+
 ## Key files
 
 | File | Responsibility |
 |---|---|
-| `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. |
-| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads `~/.config/homescreen/config.yaml`. `HeatingTopics()` builds the 3 MQTT topics for a heating unit. |
+| `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/` and `static/` via `go:embed`. Serves `/static/` from embedded FS and `/sw.js` from root path (for service worker scope). |
+| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
-| `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. |
-| `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template. Routes: `GET /` (template), `GET /api/events` (SSE), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event. |
-| `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `*Config` as data. All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
+| `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
+| `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template. `PageData` includes config + `InitialState` (JSON snapshot of all device state, embedded in HTML so the page renders correctly on first paint without waiting for SSE). Routes: `GET /` (template), `GET /api/events` (SSE), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event. |
+| `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `PageData` (config + initial state JSON). All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
+| `static/sw.js` | Service worker. Pre-caches offline page + static assets. Intercepts navigation requests — serves offline skeleton if server returns 5xx or network fails. |
+| `static/offline.html` | Standalone offline skeleton page with shimmer placeholder UI matching the real layout. Shows spinner overlay, auto-retries via page reload every 5s. |
+| `static/manifest.json` | PWA manifest. App name "Home Control", standalone display, theme color `#f4a942`. |
+| `static/inter.css` | Vendored Inter font CSS (weights 400/500/600/700). |
+| `static/lucide.css` | Vendored Lucide icon font CSS. |
+| `static/fonts/` | Vendored font files: Inter TTFs + Lucide woff2/woff/ttf. |
+| `static/icons/` | PWA icons: `icon-192.png`, `icon-512.png` (house icon on orange). |
 | `homescreen.service` | systemd unit. Runs on port 8000, after mosquitto. |
 
 ## Config
 
-Lives at `~/.config/homescreen/config.yaml`. Defines MQTT broker address and zone/room/light mappings. The HTML template renders from this config, so it's the single source of truth for what rooms exist.
+Lives at `~/.config/homescreen/config.yaml` (searched first), `/usr/local/etc/homescreen.yaml` (FreeBSD), or `/etc/homescreen.yaml` (system). Defines MQTT broker address and zone/room/light mappings. The HTML template renders from this config, so it's the single source of truth for what rooms exist.
 
 ## MQTT topic patterns
 
@@ -43,10 +52,15 @@ All publishes are retained (QoS 1).
 ## Zone aggregation
 
 Done in frontend JS, not the server:
-- **Zone temperature** = `Math.max()` of all rooms' `target_temp`
-- **Zone quiet** = all rooms must have `quiet === true`
+- **Zone temperature** = `Math.max()` of all **powered-on** rooms' `target_temp` (falls back to all rooms if none are on)
+- **Zone quiet** = all **powered-on** rooms must have `quiet === true` (falls back to all rooms if none are on)
 - Setting zone temp/quiet publishes to ALL rooms via the backend
+- When setting zone temp, also publishes to any powered-off rooms so they start at the correct setpoint when turned on
 - Room power toggles are individual
+
+## Heating power-on logic
+
+When turning a room ON via `handleRoomPower`, the backend publishes the cached target temperature first, then the power-on message. This ensures the unit starts at the correct setpoint rather than whatever stale value it had.
 
 ## API
 
@@ -60,7 +74,16 @@ GET  /api/events                           SSE stream
 
 SSE sends JSON per line: `data: {"type":"heating","zone":"...","room":"...","power":true,"target_temp":21.0,"quiet":false}`
 
-On connect, sends a full snapshot (one event per room + light), then live deltas.
+On connect, sends a full snapshot (one event per room + light), then live deltas. Heartbeat comments (`: heartbeat`) sent every 15s.
+
+## Offline / PWA behavior
+
+1. Browser registers service worker from `/sw.js` (served from root for full scope)
+2. SW pre-caches offline skeleton page + all static assets (fonts, CSS)
+3. On SSE disconnect, a spinner overlay appears after **3.5 seconds**
+4. After **3 more seconds** (6.5s total), the page reloads — the SW intercepts the navigation and serves the offline skeleton if the server is down (5xx or network error)
+5. The offline skeleton page auto-reloads every 5s until the server recovers
+6. When the server is back, the full page loads with fresh state
 
 ## Tests
 
@@ -76,7 +99,7 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 
-Integration/e2e tests clean up retained MQTT messages after themselves.
+37 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
@@ -85,7 +108,7 @@ go build -o homescreen .
 sudo systemctl restart homescreen
 ```
 
-The binary embeds `templates/index.html` via `go:embed`, so you must rebuild after template changes.
+The binary embeds `templates/index.html` and the entire `static/` directory via `go:embed`, so you must rebuild after template or static asset changes.
 
 ## Important gotchas
 
@@ -93,6 +116,9 @@ The binary embeds `templates/index.html` via `go:embed`, so you must rebuild aft
 - **MQTT client ID conflicts**: Each test creates its own MQTT client. Mosquitto disconnects existing clients when a new client connects with the same ID. The paho library uses auto-reconnect to handle this, but you'll see "connection lost: EOF" in test logs — that's expected.
 - **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).
+- **SSE heartbeats**: The server sends `: heartbeat\n\n` every 15 seconds. Without this, proxies (Caddy, exe.dev proxy) and mobile Safari kill idle TCP connections after ~30s.
+- **Service worker scope**: `sw.js` is served from `/sw.js` (not `/static/sw.js`) so it has root scope and can intercept navigation requests to `/`.
+- **5xx as offline**: The service worker treats HTTP 5xx responses (e.g. Caddy 502 when backend is down) the same as network failures — serves the offline skeleton page.
 
 ## Adding new device types
 
