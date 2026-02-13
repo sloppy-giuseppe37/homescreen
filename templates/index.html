@@ -467,8 +467,9 @@ function updateHeatingUI(zoneName) {
   const consideredRooms = onRooms.length > 0 ? onRooms : roomList;
   const maxTemp = Math.max(...consideredRooms.map(r => r.target_temp));
 
-  // Quiet: show ON only if ALL rooms have quiet on
-  const allQuiet = roomList.every(r => r.quiet);
+  // Quiet: show ON only if ALL powered-on rooms have quiet on.
+  // If no rooms are on, fall back to all rooms.
+  const allQuiet = consideredRooms.every(r => r.quiet);
 
   // Update temperature slider and display
   // (but only if the user isn't currently dragging the slider)
