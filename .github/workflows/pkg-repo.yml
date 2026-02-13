@@ -31,8 +31,8 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          # Epoch seconds ensures pkg always sees a newer version
-          VERSION="0.$(date -u +%Y%m%d%H%M%S)"
+          # Timestamp ensures pkg always sees a newer version; short SHA for traceability
+          VERSION="0.$(date -u +%Y%m%d%H%M%S).g${GITHUB_SHA::7}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
