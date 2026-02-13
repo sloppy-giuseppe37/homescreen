@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homecontrol-v3';
+const CACHE_NAME = 'homecontrol-v4';
 const OFFLINE_URL = '/static/offline.html';
 
 // Assets to pre-cache for offline support
@@ -33,7 +33,15 @@ self.addEventListener('fetch', (event) => {
   // Only handle navigation requests (HTML pages) for offline fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
+      fetch(event.request).then((response) => {
+        // If the server (or a reverse proxy like Caddy) returns a server
+        // error, treat it the same as a network failure — show the offline
+        // skeleton page instead of a raw error.
+        if (response.status >= 500) {
+          return caches.match(OFFLINE_URL) || response;
+        }
+        return response;
+      }).catch(() => caches.match(OFFLINE_URL))
     );
     return;
   }
