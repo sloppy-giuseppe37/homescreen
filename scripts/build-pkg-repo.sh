@@ -7,7 +7,8 @@
 #
 set -euo pipefail
 
-VERSION="${1:?Usage: build-pkg-repo.sh <version>}"
+VERSION="${1:?Usage: build-pkg-repo.sh <version> <signing-key>}"
+SIGNING_KEY="${2:?Usage: build-pkg-repo.sh <version> <signing-key>}"
 NAME="homescreen"
 ABI="FreeBSD:13:amd64"
 PREFIX="/usr/local"
@@ -129,10 +130,15 @@ PACKAGESITE=$(cat <<EOF
 EOF
 )
 
-# Create packagesite.yaml and compress
+# Create packagesite.yaml, sign it, and compress
 TMPCAT=$(mktemp -d)
 echo "$PACKAGESITE" > "$TMPCAT/packagesite.yaml"
-(cd "$TMPCAT" && tar cf - packagesite.yaml) | zstd -o repo/packagesite.pkg
+
+# Sign the catalog with RSA + SHA256
+openssl dgst -sha256 -sign "$SIGNING_KEY" -out "$TMPCAT/signature" "$TMPCAT/packagesite.yaml"
+echo "Signed packagesite.yaml with $SIGNING_KEY"
+
+(cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o repo/packagesite.pkg
 
 # data.pkg is a copy used by some pkg versions
 cp repo/packagesite.pkg repo/data.pkg
@@ -153,11 +159,13 @@ echo "Repository built in repo/:"
 ls -lh repo/
 echo ""
 echo "Configure on FreeBSD with:"
-echo '  mkdir -p /usr/local/etc/pkg/repos'
+echo '  mkdir -p /usr/local/etc/pkg/repos /usr/local/etc/pkg/keys'
+echo '  # Copy homescreen-repo.pub to /usr/local/etc/pkg/keys/homescreen.pub'
 echo '  cat > /usr/local/etc/pkg/repos/homescreen.conf << EOF'
 echo '  homescreen: {'
 echo '    url: "https://<user>.github.io/<repo>"'
 echo '    enabled: yes'
-echo '    signature_type: "none"'
+echo '    signature_type: "pubkey"'
+echo '    pubkey: "/usr/local/etc/pkg/keys/homescreen.pub"'
 echo '  }'
 echo '  EOF'

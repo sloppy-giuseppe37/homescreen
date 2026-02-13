@@ -36,8 +36,15 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
+      - name: Write signing key
+        run: echo "${{ secrets.PKG_SIGNING_KEY }}" > /tmp/repo.key
+
       - name: Build .pkg and repository
-        run: bash scripts/build-pkg-repo.sh "${{ steps.version.outputs.version }}"
+        run: bash scripts/build-pkg-repo.sh "${{ steps.version.outputs.version }}" /tmp/repo.key
+
+      - name: Clean up signing key
+        if: always()
+        run: rm -f /tmp/repo.key
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
