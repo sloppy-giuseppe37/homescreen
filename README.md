@@ -1,3 +1,6 @@
+> [!CAUTION]
+> This repository is 100% AI-generated slop. It should not be used by anyone, for any purpose, ever. You have been warned.
+
 # Home Control
 
 A smart home control panel that talks to devices over MQTT. It runs as a Go web server that serves a mobile-friendly UI and keeps every open browser tab in sync via Server-Sent Events (SSE).
