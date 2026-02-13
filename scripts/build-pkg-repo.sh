@@ -134,12 +134,16 @@ EOF
 TMPCAT=$(mktemp -d)
 echo "$PACKAGESITE" > "$TMPCAT/packagesite.yaml"
 
-# Sign the catalog with RSA + SHA256
-# pkg verifies by computing SHA256(content) then passing that hash to
-# EVP_DigestVerify (which internally hashes again). So we must sign the
-# SHA256 of the content, not the content directly — matching the double-hash.
-openssl dgst -sha256 -binary "$TMPCAT/packagesite.yaml" > "$TMPCAT/hash"
-openssl dgst -sha256 -sign "$SIGNING_KEY" -out "$TMPCAT/signature" "$TMPCAT/hash"
+# Sign the catalog to match FreeBSD pkg's verification protocol.
+# pkg verifies via ossl_verify_cert_cb which does:
+#   1. hex_sha256 = SHA256_HEX(content)
+#   2. hash = SHA256_RAW(hex_sha256)   (raw 32-byte hash of the hex string)
+#   3. EVP_PKEY_verify(ctx, sig, siglen, hash, 32)  with md=SHA256
+# So the signature must be PKCS1v15(SHA256_DigestInfo || SHA256(SHA256_HEX(content))).
+HEX_SHA256=$(sha256sum "$TMPCAT/packagesite.yaml" | awk '{print $1}')
+echo -n "$HEX_SHA256" | openssl dgst -sha256 -binary > "$TMPCAT/hash"
+openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "$TMPCAT/hash" \
+  -pkeyopt digest:sha256 -out "$TMPCAT/signature"
 rm "$TMPCAT/hash"
 echo "Signed packagesite.yaml with $SIGNING_KEY"
 
