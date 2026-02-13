@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="light dark">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Home Control</title>
+  <link href="/static/inter.css" rel="stylesheet">
+  <link href="/static/lucide.css" rel="stylesheet">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#f4a942">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { touch-action: manipulation; -webkit-text-size-adjust: 100%; -webkit-user-select: none; user-select: none; }
+    :root {
+      --bg: #f3f4f6; --card: #ffffff; --text: #1f2937; --text-muted: #6b7280;
+      --border: #e5e7eb; --accent: #3b82f6; --off: #d1d5db;
+      --warm: #f59e0b; --warm-glow: rgba(245,158,11,0.15);
+      --radius: 16px; --radius-sm: 10px;
+      --skel: #e5e7eb; --skel-shine: #f3f4f6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827; --card: #1f2937; --text: #f3f4f6; --text-muted: #9ca3af;
+        --border: #374151; --off: #4b5563;
+        --skel: #374151; --skel-shine: #4b5563;
+      }
+    }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-font-smoothing: antialiased; }
+    .shell { max-width: 480px; margin: 0 auto; padding: 0 16px 32px; }
+    header { display: flex; align-items: center; gap: 10px; padding: 24px 0 20px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    header .icon-house { font-size: 26px; color: var(--accent); }
+
+    /* Overlay with spinner */
+    .connection-overlay {
+      display: flex; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(255,255,255,0.55);
+      align-items: center; justify-content: center;
+    }
+    @media (prefers-color-scheme: dark) { .connection-overlay { background: rgba(0,0,0,0.45); } }
+    .connection-overlay .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Tabs */
+    .tabs { display: flex; background: var(--card); border-radius: var(--radius); padding: 4px; margin-bottom: 20px; border: 1px solid var(--border); }
+    .tab-btn {
+      flex: 1; padding: 10px; border: none; border-radius: 12px; font-family: inherit;
+      font-size: 15px; font-weight: 600; cursor: default;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      background: transparent; color: var(--text-muted); transition: all 0.2s;
+    }
+    .tab-btn.active { background: var(--accent); color: #fff; }
+    .tab-btn i { font-size: 16px; }
+
+    /* Cards */
+    .card { background: var(--card); border-radius: var(--radius); padding: 4px 16px; margin-bottom: 16px; border: 1px solid var(--border); }
+    .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 12px 0 8px; }
+
+    /* Room rows */
+    .room-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .room-row:last-child { border-bottom: none; }
+
+    /* Skeleton primitives */
+    .skel {
+      background: var(--skel); border-radius: 6px; position: relative; overflow: hidden;
+    }
+    .skel::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent 0%, var(--skel-shine) 50%, transparent 100%);
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    .skel-text { height: 14px; width: 100px; }
+    .skel-text.short { width: 72px; }
+    .skel-text.long { width: 140px; }
+    .skel-toggle { height: 28px; width: 50px; border-radius: 14px; }
+    .skel-icon { height: 18px; width: 18px; border-radius: 4px; margin-right: 10px; flex-shrink: 0; }
+    .room-label-skel { display: flex; align-items: center; }
+
+    @media (min-width: 500px) { .shell { padding: 0 24px 40px; } }
+  </style>
+</head>
+<body>
+<div class="connection-overlay"><div class="spinner"></div></div>
+
+<div class="shell">
+  <header>
+    <i class="icon-house"></i>
+    <h1>Home Control</h1>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active"><i class="icon-lightbulb"></i> Lights</button>
+    <button class="tab-btn"><i class="icon-flame"></i> Heating</button>
+  </div>
+
+  <!-- Skeleton lights cards -->
+  <div class="card">
+    <div class="card-title"><span class="skel skel-text short">&nbsp;</span></div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text short">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text long">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="skel skel-text short">&nbsp;</span></div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+    <div class="room-row">
+      <span class="room-label-skel"><span class="skel skel-icon">&nbsp;</span><span class="skel skel-text short">&nbsp;</span></span>
+      <span class="skel skel-toggle">&nbsp;</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Retry: reload every 5 seconds to re-establish connection
+  setInterval(() => { location.reload(); }, 5000);
+</script>
+</body>
+</html>

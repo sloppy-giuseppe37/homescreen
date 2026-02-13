@@ -80,7 +80,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create static sub-fs: %v", err)
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+	staticHandler := http.FileServer(http.FS(staticSub))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler))
+
+	// Serve service worker from root scope so it can control all pages
+	mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "no-cache")
+		data, _ := staticFS.ReadFile("static/sw.js")
+		w.Write(data)
+	})
 
 	// --- Start the server ---
 	addr := ":8000"

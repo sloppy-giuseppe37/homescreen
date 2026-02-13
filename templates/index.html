@@ -5,6 +5,11 @@
   <meta name="color-scheme" content="light dark">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Home Control</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#f4a942">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link href="/static/inter.css" rel="stylesheet">
   <link href="/static/lucide.css" rel="stylesheet">
   <style>
@@ -649,6 +654,11 @@ initialState.forEach(data => {
 // --- Start SSE ---
 // SSE takes over from here — any changes after page load arrive as events.
 connectSSE();
+
+// --- Register Service Worker ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
 </script>
 </body>
 </html>
