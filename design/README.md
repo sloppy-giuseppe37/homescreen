@@ -6,8 +6,9 @@ Prototyping files for the PWA icon. Uses [Lucide](https://lucide.dev) icons load
 
 | File | Purpose |
 |---|---|
-| `icon-preview.html` | Side-by-side comparison of icon layout variants. Add new layouts here to compare options. |
-| `icon-render.html` | Export-ready render at 512×512. Screenshot this to produce the final PNGs. |
+| `icon.svg` | Source SVG for the current PWA icon. Edit this to change the icon. |
+| `icon-preview.html` | Side-by-side comparison of icon layout variants (uses Lucide CDN). Add new layouts here to compare options. |
+| `icon-render.html` | Browser-based render at 512×512 for visual preview. |
 
 ## How to iterate on the icon
 
@@ -26,13 +27,14 @@ Prototyping files for the PWA icon. Uses [Lucide](https://lucide.dev) icons load
    background: linear-gradient(to top left in oklch, #f4a942, #2d6ab8);
    ```
 
-5. **Export PNGs** — once happy, transfer your final values to `icon-render.html` (which renders at 512×512), then:
+5. **Export PNGs** — once happy, update `icon.svg` with your final layout, then:
    ```bash
-   # Screenshot the render page at 512x512 for icon-512.png
-   # Then downscale for icon-192.png:
-   convert static/icons/icon-512.png -resize 192x192 static/icons/icon-192.png
+   rsvg-convert -w 512 -h 512 design/icon.svg -o static/icons/icon-512.png
+   rsvg-convert -w 192 -h 192 design/icon.svg -o static/icons/icon-192.png
    ```
-   Or use the browser tool's element screenshot on `#icon`.
+   This produces PNGs with transparent backgrounds. Requires `librsvg2-bin` (`sudo apt install librsvg2-bin`).
+
+   The SVG gradient approximates an oklch blue→orange gradient with 5 stops since SVG doesn't support oklch natively.
 
 6. **Rebuild** — the icons are embedded in the binary:
    ```bash
