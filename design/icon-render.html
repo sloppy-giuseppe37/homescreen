@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body { margin: 0; background: transparent; }
+
+  /* === ICON DESIGN === */
+  /* Edit these values then screenshot at 512x512 to export. */
+
+  .icon-box {
+    width: 512px;
+    height: 512px;
+    border-radius: 114px;
+    background: linear-gradient(to top left in oklch, #f4a942, #2d6ab8);
+    position: relative;
+  }
+  .icon-box svg {
+    stroke: #fff;
+    stroke-width: 2;
+    fill: none;
+    position: absolute;
+  }
+  .i-fan  { width: 160px; height: 160px; top: 83px; left: 83px; }
+  .i-lamp { width: 160px; height: 160px; top: 83px; right: 83px; }
+  .i-home { width: 179px; height: 179px; bottom: 77px; left: 50%; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<div class="icon-box" id="icon">
+  <i class="i-fan" data-lucide="fan"></i>
+  <i class="i-lamp" data-lucide="lightbulb"></i>
+  <i class="i-home" data-lucide="home"></i>
+</div>
+<script>lucide.createIcons();</script>
+</body>
+</html>

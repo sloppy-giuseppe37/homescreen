@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PWA Icon Preview</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    margin: 0;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 { text-align: center; font-size: 24px; margin-bottom: 8px; color: #fff; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 48px; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 48px 40px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .icon-box {
+    width: 160px;
+    height: 160px;
+    border-radius: 36px;
+    background: linear-gradient(to top left in oklch, #f4a942, #2d6ab8);
+    box-shadow: 0 6px 30px rgba(0,0,0,0.4);
+    position: relative;
+    transition: transform 0.15s;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .icon-box:hover { transform: scale(1.06); }
+  .icon-box svg {
+    stroke: #fff;
+    stroke-width: 2;
+    fill: none;
+    position: absolute;
+  }
+  .label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ccc;
+    text-align: center;
+  }
+  .label small {
+    display: block;
+    font-weight: 400;
+    font-size: 11px;
+    color: #777;
+    margin-top: 2px;
+  }
+
+  /* === CURRENT ICON: Inverted triangle === */
+  .inverted-triangle .i-fan  { width: 50px; height: 50px; top: 26px; left: 26px; }
+  .inverted-triangle .i-lamp { width: 50px; height: 50px; top: 26px; right: 26px; }
+  .inverted-triangle .i-home { width: 56px; height: 56px; bottom: 24px; left: 50%; transform: translateX(-50%); }
+
+  /* === ADD MORE LAYOUTS BELOW === */
+  /* Example:
+  .my-layout .i-fan  { width: 40px; height: 40px; top: 20px; left: 20px; }
+  .my-layout .i-lamp { width: 40px; height: 40px; top: 20px; right: 20px; }
+  .my-layout .i-home { width: 60px; height: 60px; bottom: 20px; left: 50%; transform: translateX(-50%); }
+  */
+</style>
+</head>
+<body>
+
+<h1>PWA Icon Preview</h1>
+<p class="subtitle">Edit this file to prototype new icon layouts. See icon-render.html to export PNGs.</p>
+
+<div class="grid">
+
+  <!-- Current icon -->
+  <div class="option">
+    <div class="icon-box inverted-triangle">
+      <i class="i-fan" data-lucide="fan"></i>
+      <i class="i-lamp" data-lucide="lightbulb"></i>
+      <i class="i-home" data-lucide="home"></i>
+    </div>
+    <div class="label">Current<small>Inverted triangle — fan, bulb, home</small></div>
+  </div>
+
+  <!-- Add more options here by duplicating the block above,
+       changing the layout class and icon positions -->
+
+</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>
