@@ -20,7 +20,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | File | Responsibility |
 |---|---|
 | `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/` and `static/` via `go:embed`. Serves `/static/` from embedded FS and `/sw.js` from root path (for service worker scope). |
-| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. |
+| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
 | `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template. `PageData` includes config + `InitialState` (JSON snapshot of all device state, embedded in HTML so the page renders correctly on first paint without waiting for SSE). Routes: `GET /` (template), `GET /api/events` (SSE), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event. |
@@ -45,9 +45,15 @@ Heating rooms use a `unit_id` to construct three topics:
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetTemperature` — temp (e.g. "21.0")
 - `HomeKit/{unit_id}_IndoorQuiet/Switch/On` — quiet (0/1)
 
-Lights have an arbitrary topic per light (configured in YAML). Value is 0/1.
+Lights use zigbee2mqtt topics. Each light has a list of entities. For each entity:
+- Subscribe: `{topic_prefix}/{entity}` — state payloads are JSON, e.g. `{"state":"ON"}`
+- Publish: `{topic_prefix}/{entity}/set` — command payloads are `{"state":"ON"}` or `{"state":"OFF"}`
 
-All publishes are retained (QoS 1).
+A light group with multiple entities uses **any-on logic**: the group shows ON if any entity is ON, and OFF only when all entities are OFF. Toggling a light publishes to ALL entities in the group.
+
+Config format uses `entities: [entity1, entity2]` (not a single `topic:` field).
+
+All heating publishes are retained (QoS 1). Light publishes use zigbee2mqtt conventions.
 
 ## Zone aggregation
 
@@ -99,7 +105,7 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 
-37 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
+41 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 

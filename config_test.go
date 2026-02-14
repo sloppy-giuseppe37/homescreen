@@ -38,6 +38,7 @@ func TestLoadConfig_Valid(t *testing.T) {
 	yamlContent := `
 mqtt:
   broker: "tcp://testhost:1883"
+  topic_prefix: "zigbee2mqtt"
 
 zones:
   - name: Upstairs
@@ -45,8 +46,8 @@ zones:
       - name: Bedroom
         unit_id: BedroomFaikin
     lights:
-      - name: Bedroom Light
-        topic: lights/bedroom
+      - name: Bedroom
+        entities: [bed, ceiling]
   - name: Downstairs
     heating:
       - name: Kitchen
@@ -69,6 +70,11 @@ zones:
 		t.Errorf("broker = %q, want %q", cfg.MQTT.Broker, "tcp://testhost:1883")
 	}
 
+	// Verify topic prefix
+	if cfg.MQTT.TopicPrefix != "zigbee2mqtt" {
+		t.Errorf("topic_prefix = %q, want %q", cfg.MQTT.TopicPrefix, "zigbee2mqtt")
+	}
+
 	// Verify zones
 	if len(cfg.Zones) != 2 {
 		t.Fatalf("got %d zones, want 2", len(cfg.Zones))
@@ -89,8 +95,40 @@ zones:
 	if len(cfg.Zones[0].Lights) != 1 {
 		t.Fatalf("Upstairs lights = %d, want 1", len(cfg.Zones[0].Lights))
 	}
-	if cfg.Zones[0].Lights[0].Topic != "lights/bedroom" {
-		t.Errorf("light topic = %q, want %q", cfg.Zones[0].Lights[0].Topic, "lights/bedroom")
+	if len(cfg.Zones[0].Lights[0].Entities) != 2 {
+		t.Fatalf("light entities = %d, want 2", len(cfg.Zones[0].Lights[0].Entities))
+	}
+	if cfg.Zones[0].Lights[0].Entities[0] != "bed" {
+		t.Errorf("entity[0] = %q, want %q", cfg.Zones[0].Lights[0].Entities[0], "bed")
+	}
+}
+
+// TestLightStateTopics verifies that LightConfig.StateTopics()
+// constructs the correct MQTT state topic strings.
+func TestLightStateTopics(t *testing.T) {
+	light := LightConfig{Name: "Kitchen", Entities: []string{"fairy_lights", "kitchen_table_1"}}
+	topics := light.StateTopics("zigbee2mqtt")
+
+	if len(topics) != 2 {
+		t.Fatalf("got %d topics, want 2", len(topics))
+	}
+	if topics[0] != "zigbee2mqtt/fairy_lights" {
+		t.Errorf("topic[0] = %q, want %q", topics[0], "zigbee2mqtt/fairy_lights")
+	}
+	if topics[1] != "zigbee2mqtt/kitchen_table_1" {
+		t.Errorf("topic[1] = %q, want %q", topics[1], "zigbee2mqtt/kitchen_table_1")
+	}
+}
+
+// TestLightSetTopic verifies that LightConfig.SetTopic()
+// constructs the correct MQTT command topic.
+func TestLightSetTopic(t *testing.T) {
+	light := LightConfig{Name: "Kitchen", Entities: []string{"fairy_lights"}}
+	topic := light.SetTopic("zigbee2mqtt", "fairy_lights")
+
+	want := "zigbee2mqtt/fairy_lights/set"
+	if topic != want {
+		t.Errorf("set topic = %q, want %q", topic, want)
 	}
 }
 

@@ -133,11 +133,19 @@ func (app *App) buildHeatingEvent(zoneName string, room HeatingRoom) string {
 	return string(data)
 }
 
-// buildLightEvent creates a JSON event string for one light
-// by reading its topic from the MQTT cache.
+// buildLightEvent creates a JSON event string for one light group.
+// A light group may contain multiple zigbee2mqtt entities.
+// The "on" state uses any-on logic: if any entity is ON, the group is ON.
+// Only when all entities are OFF is the group OFF.
 func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
-	val, _ := app.MQTT.GetValue(light.Topic)
-	on := val == "1"
+	on := false
+	prefix := app.Config.MQTT.TopicPrefix
+	for _, entity := range light.Entities {
+		stateTopic := prefix + "/" + entity
+		if val, ok := app.MQTT.GetValue(stateTopic); ok {
+			on = on || parseLightState(val)
+		}
+	}
 
 	event := map[string]any{
 		"type": "light",
@@ -147,6 +155,18 @@ func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	}
 	data, _ := json.Marshal(event)
 	return string(data)
+}
+
+// parseLightState extracts the on/off state from a zigbee2mqtt state payload.
+// zigbee2mqtt publishes JSON like {"state":"ON",...} on the entity topic.
+func parseLightState(payload string) bool {
+	var msg struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+		return false
+	}
+	return msg.State == "ON"
 }
 
 // TopicToEvent converts an MQTT topic + value into a JSON SSE event string.
@@ -161,10 +181,12 @@ func (app *App) TopicToEvent(topic, value string) string {
 				return app.buildHeatingEvent(zone.Name, room)
 			}
 		}
-		// Check light topics
+		// Check light entity state topics
 		for _, light := range zone.Lights {
-			if topic == light.Topic {
-				return app.buildLightEvent(zone.Name, light)
+			for _, stateTopic := range light.StateTopics(app.Config.MQTT.TopicPrefix) {
+				if topic == stateTopic {
+					return app.buildLightEvent(zone.Name, light)
+				}
 			}
 		}
 	}
@@ -331,7 +353,8 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleLightPower turns a single light on or off.
+// handleLightPower turns a light group on or off.
+// Publishes to all entities in the group via zigbee2mqtt /set topics.
 func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 	zoneName := r.PathValue("zone")
 	lightName := r.PathValue("name")
@@ -361,13 +384,24 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	val := "0"
+	state := "OFF"
 	if b, ok := req.Value.(bool); ok && b {
-		val = "1"
+		state = "ON"
+	}
+	payload := `{"state":"` + state + `"}`
+
+	// Publish to every entity in this light group
+	prefix := app.Config.MQTT.TopicPrefix
+	var errors []string
+	for _, entity := range light.Entities {
+		topic := light.SetTopic(prefix, entity)
+		if err := app.MQTT.Publish(topic, payload); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
+		}
 	}
 
-	if err := app.MQTT.Publish(light.Topic, val); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if len(errors) > 0 {
+		http.Error(w, strings.Join(errors, "; "), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

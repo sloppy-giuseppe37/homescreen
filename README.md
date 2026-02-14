@@ -40,6 +40,7 @@ Config is searched in order:
 ```yaml
 mqtt:
   broker: "tcp://localhost:1883"
+  topic_prefix: zigbee2mqtt        # zigbee2mqtt prefix for light topics
 
 zones:
   - name: Upstairs
@@ -50,9 +51,11 @@ zones:
         unit_id: GuestFaikin
     lights:
       - name: Bedroom
-        topic: HomeKit/BedroomLight/Lightbulb/On   # literal MQTT topic
+        entities:                  # zigbee2mqtt entity names
+          - BedroomLight
       - name: "Kids' Room — Lamp"
-        topic: HomeKit/KidsLamp/Lightbulb/On
+        entities:
+          - KidsLamp
 
   - name: Downstairs
     heating:
@@ -60,7 +63,9 @@ zones:
         unit_id: KitchenFaikin
     lights:
       - name: Kitchen
-        topic: HomeKit/KitchenLight/Lightbulb/On
+        entities:
+          - KitchenLight1
+          - KitchenLight2          # multiple entities = light group
 ```
 
 **Heating** rooms use a `unit_id` to construct three MQTT topics per room:
@@ -68,7 +73,11 @@ zones:
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetTemperature` — target temp (e.g. "21.0")
 - `HomeKit/{unit_id}_IndoorQuiet/Switch/On` — quiet mode (0/1)
 
-**Lights** use an arbitrary `topic` directly — no naming convention assumed.
+**Lights** use zigbee2mqtt entities. Each light has a `name` and a list of `entities`. For each entity, the server:
+- Subscribes to `{topic_prefix}/{entity}` for state (JSON payloads like `{"state":"ON"}`)
+- Publishes to `{topic_prefix}/{entity}/set` for commands (JSON payloads like `{"state":"ON"}` or `{"state":"OFF"}`)
+
+A light with multiple entities acts as a group: it shows **ON** if **any** entity is ON, and **OFF** only when **all** entities are OFF. Toggling a light publishes the command to **all** entities in the group.
 
 The HTML is generated from this config, so adding a room or light is just a YAML edit and a restart.
 
@@ -138,7 +147,7 @@ Requires mosquitto running on localhost:1883. To skip MQTT tests:
 SKIP_INTEGRATION=1 go test -v ./...
 ```
 
-There are 37 tests across five files:
+There are 41 tests across five files:
 
 | Level | File | What it tests |
 |---|---|---|

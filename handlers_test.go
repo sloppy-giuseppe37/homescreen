@@ -13,7 +13,7 @@ import (
 // testConfig returns a small config for testing.
 func testConfig() *Config {
 	return &Config{
-		MQTT: MQTTConfig{Broker: "tcp://localhost:1883"},
+		MQTT: MQTTConfig{Broker: "tcp://localhost:1883", TopicPrefix: "zigbee2mqtt"},
 		Zones: []ZoneConfig{
 			{
 				Name: "Upstairs",
@@ -22,7 +22,7 @@ func testConfig() *Config {
 					{Name: "Guest Room", UnitID: "GuestFaikin"},
 				},
 				Lights: []LightConfig{
-					{Name: "Bedroom", Topic: "lights/bedroom"},
+					{Name: "Bedroom", Entities: []string{"bed", "ceiling"}},
 				},
 			},
 			{
@@ -31,7 +31,7 @@ func testConfig() *Config {
 					{Name: "Kitchen", UnitID: "KitchenFaikin"},
 				},
 				Lights: []LightConfig{
-					{Name: "Kitchen", Topic: "lights/kitchen"},
+					{Name: "Kitchen", Entities: []string{"fairy_lights", "kitchen_table_1"}},
 				},
 			},
 		},
@@ -99,13 +99,14 @@ func TestTopicToEvent_HeatingPower(t *testing.T) {
 	}
 }
 
-// TestTopicToEvent_Light tests that a light topic is correctly mapped.
+// TestTopicToEvent_Light tests that a zigbee2mqtt entity state topic
+// is correctly mapped to a light SSE event.
 func TestTopicToEvent_Light(t *testing.T) {
 	app := testApp(map[string]string{
-		"lights/bedroom": "1",
+		"zigbee2mqtt/bed": `{"state":"ON"}`,
 	})
 
-	eventJSON := app.TopicToEvent("lights/bedroom", "1")
+	eventJSON := app.TopicToEvent("zigbee2mqtt/bed", `{"state":"ON"}`)
 
 	var event map[string]any
 	json.Unmarshal([]byte(eventJSON), &event)
@@ -116,8 +117,47 @@ func TestTopicToEvent_Light(t *testing.T) {
 	if event["zone"] != "Upstairs" {
 		t.Errorf("zone = %v, want 'Upstairs'", event["zone"])
 	}
+	if event["name"] != "Bedroom" {
+		t.Errorf("name = %v, want 'Bedroom'", event["name"])
+	}
 	if event["on"] != true {
 		t.Errorf("on = %v, want true", event["on"])
+	}
+}
+
+// TestTopicToEvent_Light_AnyOn tests the any-on aggregation logic:
+// if any entity in a light group is ON, the group reports ON.
+func TestTopicToEvent_Light_AnyOn(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"OFF"}`,
+		"zigbee2mqtt/ceiling": `{"state":"ON"}`,
+	})
+
+	eventJSON := app.TopicToEvent("zigbee2mqtt/ceiling", `{"state":"ON"}`)
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != true {
+		t.Errorf("on = %v, want true (any-on: ceiling is ON)", event["on"])
+	}
+}
+
+// TestTopicToEvent_Light_AllOff tests that the group reports OFF
+// only when all entities are OFF.
+func TestTopicToEvent_Light_AllOff(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"OFF"}`,
+		"zigbee2mqtt/ceiling": `{"state":"OFF"}`,
+	})
+
+	eventJSON := app.TopicToEvent("zigbee2mqtt/bed", `{"state":"OFF"}`)
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != false {
+		t.Errorf("on = %v, want false (all entities OFF)", event["on"])
 	}
 }
 
@@ -165,7 +205,7 @@ func TestHandleIndex_InitialState(t *testing.T) {
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "1",
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "23.0",
 		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "1",
-		"lights/bedroom": "1",
+		"zigbee2mqtt/bed": `{"state":"ON"}`,
 	})
 
 	mux := http.NewServeMux()
@@ -202,7 +242,7 @@ func TestHandleIndex_InitialState(t *testing.T) {
 func TestBuildSnapshot(t *testing.T) {
 	app := testApp(map[string]string{
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature": "22.0",
-		"lights/kitchen": "1",
+		"zigbee2mqtt/fairy_lights": `{"state":"ON"}`,
 	})
 
 	snapshot := app.buildSnapshot()
@@ -358,10 +398,10 @@ func TestBuildHeatingEvent_Defaults(t *testing.T) {
 // TestBuildLightEvent verifies light event JSON structure.
 func TestBuildLightEvent(t *testing.T) {
 	app := testApp(map[string]string{
-		"lights/bedroom": "1",
+		"zigbee2mqtt/bed": `{"state":"ON"}`,
 	})
 
-	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Topic: "lights/bedroom"})
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
 
 	var event map[string]any
 	json.Unmarshal([]byte(eventJSON), &event)
@@ -369,7 +409,46 @@ func TestBuildLightEvent(t *testing.T) {
 	if event["type"] != "light" {
 		t.Errorf("type = %v, want 'light'", event["type"])
 	}
+	// any-on: bed is ON, ceiling has no cached state → group is ON
 	if event["on"] != true {
 		t.Errorf("on = %v, want true", event["on"])
+	}
+}
+
+// TestBuildLightEvent_AllOff verifies light reports OFF when all entities are OFF.
+func TestBuildLightEvent_AllOff(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"OFF"}`,
+		"zigbee2mqtt/ceiling": `{"state":"OFF"}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != false {
+		t.Errorf("on = %v, want false", event["on"])
+	}
+}
+
+// TestParseLightState verifies parsing of zigbee2mqtt JSON payloads.
+func TestParseLightState(t *testing.T) {
+	tests := []struct {
+		payload string
+		want    bool
+	}{
+		{`{"state":"ON"}`, true},
+		{`{"state":"OFF"}`, false},
+		{`{"state":"ON","brightness":254}`, true},
+		{`{"state":"OFF","brightness":0}`, false},
+		{`not json`, false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := parseLightState(tt.payload)
+		if got != tt.want {
+			t.Errorf("parseLightState(%q) = %v, want %v", tt.payload, got, tt.want)
+		}
 	}
 }

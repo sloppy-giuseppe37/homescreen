@@ -104,9 +104,9 @@ func (m *MQTTClient) allTopics() []string {
 			topics = append(topics, power, temp, quiet)
 		}
 
-		// Each light has 1 topic
+		// Each light has one state topic per entity
 		for _, light := range zone.Lights {
-			topics = append(topics, light.Topic)
+			topics = append(topics, light.StateTopics(m.config.MQTT.TopicPrefix)...)
 		}
 	}
 

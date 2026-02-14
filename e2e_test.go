@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	mqttlib "github.com/eclipse/paho.mqtt.golang"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -103,7 +105,11 @@ func clearRetained(t *testing.T, app *App) {
 			}
 		}
 		for _, light := range zone.Lights {
-			app.MQTT.client.Publish(light.Topic, 1, true, []byte{})
+			prefix := app.Config.MQTT.TopicPrefix
+			for _, entity := range light.Entities {
+				app.MQTT.client.Publish(prefix+"/"+entity, 1, true, []byte{})
+				app.MQTT.client.Publish(prefix+"/"+entity+"/set", 1, true, []byte{})
+			}
 		}
 	}
 	time.Sleep(100 * time.Millisecond)
@@ -222,10 +228,35 @@ func TestE2E_FullHeatingFlow(t *testing.T) {
 }
 
 // TestE2E_LightToggle tests the full light on/off flow.
+// Since there's no real zigbee2mqtt bridge in tests, we simulate it:
+// a separate MQTT client subscribes to /set topics and echoes state back.
 func TestE2E_LightToggle(t *testing.T) {
 	baseURL, app, cleanup := e2eSetup(t)
 	defer cleanup()
 	defer clearRetained(t, app)
+
+	// Create a separate MQTT client to simulate zigbee2mqtt bridge
+	opts := mqttlib.NewClientOptions()
+	opts.AddBroker(app.Config.MQTT.Broker)
+	opts.SetClientID("test-zigbee2mqtt-bridge")
+	bridge := mqttlib.NewClient(opts)
+	token := bridge.Connect()
+	token.Wait()
+	if err := token.Error(); err != nil {
+		t.Fatalf("bridge connect: %v", err)
+	}
+	defer bridge.Disconnect(250)
+
+	// Simulate zigbee2mqtt: when we receive a /set command, publish state back
+	prefix := app.Config.MQTT.TopicPrefix
+	for _, entity := range []string{"bed", "ceiling"} {
+		setTopic := prefix + "/" + entity + "/set"
+		stateTopic := prefix + "/" + entity
+		bridge.Subscribe(setTopic, 1, func(c mqttlib.Client, msg mqttlib.Message) {
+			// Echo the state payload back to the state topic
+			c.Publish(stateTopic, 1, true, msg.Payload())
+		}).Wait()
+	}
 
 	// Connect SSE
 	events, closeSSE := sseReader(t, baseURL)

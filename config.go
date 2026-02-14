@@ -25,7 +25,8 @@ type Config struct {
 
 // MQTTConfig holds the broker connection details.
 type MQTTConfig struct {
-	Broker string `yaml:"broker"` // e.g. "tcp://localhost:1883"
+	Broker      string `yaml:"broker"`       // e.g. "tcp://localhost:1883"
+	TopicPrefix string `yaml:"topic_prefix"` // zigbee2mqtt topic prefix, e.g. "zigbee2mqtt"
 }
 
 // ZoneConfig represents a physical zone in the house (e.g. "Upstairs").
@@ -44,11 +45,29 @@ type HeatingRoom struct {
 	UnitID string `yaml:"unit_id"` // e.g. "BedroomFaikin"
 }
 
-// LightConfig maps a light name to its MQTT topic.
-// The topic is the full MQTT topic path — no pattern, just a literal string.
+// LightConfig maps a UI toggle to one or more zigbee2mqtt entities.
+// A single toggle may control multiple physical lights (e.g. a room with
+// separate ceiling and lamp entities). The toggle shows ON if any entity
+// is on, and OFF only when all entities are off.
 type LightConfig struct {
-	Name  string `yaml:"name"`  // display name, e.g. "Kids' Room — Lamp"
-	Topic string `yaml:"topic"` // full MQTT topic, e.g. "HomeKit/KidsLamp/Lightbulb/On"
+	Name     string   `yaml:"name"`     // display name, e.g. "Kitchen"
+	Entities []string `yaml:"entities"` // zigbee2mqtt entity IDs, e.g. ["fairy_lights", "kitchen_table_1"]
+}
+
+// StateTopics returns the MQTT topics to subscribe to for reading state.
+// Each entity publishes state to "{prefix}/{entity}".
+func (l LightConfig) StateTopics(prefix string) []string {
+	topics := make([]string, len(l.Entities))
+	for i, e := range l.Entities {
+		topics[i] = prefix + "/" + e
+	}
+	return topics
+}
+
+// SetTopic returns the MQTT topic to publish commands to for an entity.
+// Commands are sent to "{prefix}/{entity}/set".
+func (l LightConfig) SetTopic(prefix, entity string) string {
+	return prefix + "/" + entity + "/set"
 }
 
 // HeatingTopics returns the three MQTT topics for a heating unit.

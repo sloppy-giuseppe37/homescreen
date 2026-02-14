@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 // skipIfNoMQTT skips the test if SKIP_INTEGRATION is set or
@@ -178,12 +180,30 @@ func TestIntegration_ZoneQuiet(t *testing.T) {
 	}
 }
 
-// TestIntegration_LightPower tests toggling a light.
+// TestIntegration_LightPower tests toggling a light group.
+// The handler publishes to zigbee2mqtt/{entity}/set topics.
+// We verify the commands are published correctly by checking the cache
+// for the /set topics (the broker retains them).
 func TestIntegration_LightPower(t *testing.T) {
 	skipIfNoMQTT(t)
 
 	app, cleanup := integrationApp(t)
 	defer cleanup()
+
+	// Subscribe to /set topics so we can verify publishes
+	prefix := app.Config.MQTT.TopicPrefix
+	setTopics := []string{
+		prefix + "/bed/set",
+		prefix + "/ceiling/set",
+	}
+	for _, topic := range setTopics {
+		t := topic
+		app.MQTT.client.Subscribe(t, 1, func(_ mqtt.Client, msg mqtt.Message) {
+			app.MQTT.cacheMu.Lock()
+			app.MQTT.cache[t] = string(msg.Payload())
+			app.MQTT.cacheMu.Unlock()
+		}).Wait()
+	}
 
 	mux := http.NewServeMux()
 	app.SetupRoutes(mux)
@@ -200,12 +220,45 @@ func TestIntegration_LightPower(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond)
 
-	val, ok := app.MQTT.GetValue("lights/bedroom")
-	if !ok {
-		t.Fatal("light topic not in cache")
+	// Verify commands were published to both entities
+	for _, topic := range setTopics {
+		val, ok := app.MQTT.GetValue(topic)
+		if !ok {
+			t.Errorf("%s: not in cache", topic)
+			continue
+		}
+		want := `{"state":"ON"}`
+		if val != want {
+			t.Errorf("%s = %q, want %q", topic, val, want)
+		}
 	}
-	if val != "1" {
-		t.Errorf("cached light = %q, want %q", val, "1")
+}
+
+// TestIntegration_LightStateFromMQTT tests that receiving zigbee2mqtt
+// state messages updates the light state correctly.
+func TestIntegration_LightStateFromMQTT(t *testing.T) {
+	skipIfNoMQTT(t)
+
+	app, cleanup := integrationApp(t)
+	defer cleanup()
+
+	prefix := app.Config.MQTT.TopicPrefix
+
+	// Simulate zigbee2mqtt publishing state for one entity
+	err := app.MQTT.Publish(prefix+"/bed", `{"state":"ON"}`)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify the cached value
+	val, ok := app.MQTT.GetValue(prefix + "/bed")
+	if !ok {
+		t.Fatal("entity state not in cache")
+	}
+	if !strings.Contains(val, `"ON"`) {
+		t.Errorf("cached state = %q, want ON", val)
 	}
 }
 
@@ -408,8 +461,8 @@ func TestIntegration_MultipleClients(t *testing.T) {
 		<-ch2
 	}
 
-	// Trigger a change
-	req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/power",
+	// Trigger a change (use heating — lights need a zigbee2mqtt bridge for round-trip)
+	req := httptest.NewRequest("POST", "/api/heating/room/Upstairs/Bedroom/power",
 		bytes.NewBufferString(`{"value": true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -419,11 +472,11 @@ func TestIntegration_MultipleClients(t *testing.T) {
 	for i, ch := range []chan map[string]any{ch1, ch2} {
 		select {
 		case event := <-ch:
-			if event["type"] != "light" {
-				t.Errorf("client %d: type = %v, want 'light'", i+1, event["type"])
+			if event["type"] != "heating" {
+				t.Errorf("client %d: type = %v, want 'heating'", i+1, event["type"])
 			}
-			if event["on"] != true {
-				t.Errorf("client %d: on = %v, want true", i+1, event["on"])
+			if event["power"] != true {
+				t.Errorf("client %d: power = %v, want true", i+1, event["power"])
 			}
 		case <-time.After(3 * time.Second):
 			t.Errorf("client %d: no event received", i+1)
