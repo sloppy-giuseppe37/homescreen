@@ -215,7 +215,7 @@
       color: var(--text-muted);
       transition: color 0.3s;
     }
-    .room-label i.lit { color: var(--warm); }
+    .room-label i.lit { color: var(--accent); }
     .room-label i.heated { color: #ef4444; }
 
     .toggle {
@@ -244,7 +244,7 @@
       transition: transform 0.25s;
     }
     .toggle input:checked + .slider { background: var(--accent); }
-    #lights .toggle input:checked + .slider { background: var(--warm); }
+    #lights .toggle input:checked + .slider { background: var(--accent); }
     .toggle input:checked + .slider::before { transform: translateX(22px); }
     .toggle.warm input:checked + .slider { background: var(--warm); }
 
@@ -365,14 +365,14 @@
     }
     .brightness-slider-row input[type=range]::-webkit-slider-thumb {
       width: 22px; height: 22px;
-      background: var(--warm);
-      box-shadow: 0 1px 6px rgba(245,158,11,0.35);
+      background: var(--accent);
+      box-shadow: 0 1px 6px rgba(59,130,246,0.35);
       border: 2px solid var(--card);
     }
     .brightness-slider-row input[type=range]::-moz-range-thumb {
       width: 22px; height: 22px;
-      background: var(--warm);
-      box-shadow: 0 1px 6px rgba(245,158,11,0.35);
+      background: var(--accent);
+      box-shadow: 0 1px 6px rgba(59,130,246,0.35);
       border: 2px solid var(--card);
     }
     .brightness-row.brightness-off input[type=range]::-webkit-slider-thumb {
@@ -873,7 +873,7 @@ function updateBrightnessTrack(slider) {
   const trackBg = getComputedStyle(document.documentElement)
     .getPropertyValue('--border').trim();
   const isOff = slider.closest('.brightness-row')?.classList.contains('brightness-off');
-  const fillColor = isOff ? trackBg : '#f59e0b';
+  const fillColor = isOff ? trackBg : '#3b82f6';
   slider.style.background =
     `linear-gradient(to right, ${fillColor} ${pct}%, ${trackBg} ${pct}%)`;
 }
