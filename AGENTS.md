@@ -55,7 +55,7 @@ Lights use zigbee2mqtt topics. Each light has a list of entities. For each entit
 
 A light group with multiple entities uses **any-on logic**: the group shows ON if any entity is ON, and OFF only when all entities are OFF. Toggling a light publishes to ALL entities in the group.
 
-**Brightness** is optional per-entity (not per-light group). Not all entities in a group may support it — only those whose zigbee2mqtt payload includes a `brightness` field (0-254) will receive brightness commands. The UI shows a brightness slider when any entity in the group reports brightness. For groups, the displayed brightness is the max across entities that support it. Setting brightness publishes `{"brightness":N}` only to entities that have previously reported brightness in their cached state. The slider is colored grey when all brightness-capable entities are OFF, and orange when at least one is ON.
+**Brightness** is optional per-entity (not per-light group). Not all entities in a group may support it — only those whose zigbee2mqtt payload includes a `brightness` field (0-254) will receive brightness commands. The UI shows a brightness slider when any entity in the group reports brightness. For groups, the displayed brightness is the max across entities that support it. Setting brightness publishes `{"brightness":N}` only to entities that have previously reported brightness in their cached state **and are currently ON** — dragging the slider never turns on an OFF light. When turning a light ON via the power toggle, the frontend includes the current slider value as `"brightness"` in the request; the backend sends `{"state":"ON","brightness":N}` to brightness-capable entities so they start at the right level. The slider is colored grey when all brightness-capable entities are OFF, and orange when at least one is ON.
 
 Config format uses `entities: [entity1, entity2]` (not a single `topic:` field).
 
@@ -81,7 +81,8 @@ POST /api/heating/zone/{zone}/temperature  {"value": 21}      → publishes to a
 POST /api/heating/zone/{zone}/quiet        {"value": true}    → publishes to all rooms
 POST /api/heating/room/{zone}/{room}/power {"value": true}    → single room
 POST /api/light/{zone}/{name}/power        {"value": true}    → single light
-POST /api/light/{zone}/{name}/brightness   {"value": 128}     → single light (0-254)
+POST /api/light/{zone}/{name}/power        {"value": true, "brightness": 128} → with initial brightness
+POST /api/light/{zone}/{name}/brightness   {"value": 128}     → single light (0-254), only ON entities
 GET  /api/events                           SSE stream
 ```
 

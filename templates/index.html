@@ -764,8 +764,26 @@ document.querySelectorAll('input[data-light]').forEach(toggle => {
     const zone = toggle.dataset.zone;
     const name = toggle.dataset.light;
     suppress(`light:${zone}/${name}`, 1500);
-    postAPI(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(name)}/power`,
-            toggle.checked);
+
+    if (toggle.checked) {
+      // When turning on, include current slider brightness if available
+      const bRow = document.querySelector(
+        `.brightness-row[data-brightness-zone="${zone}"][data-brightness-name="${name}"]`
+      );
+      const slider = bRow?.querySelector('.brightness-range');
+      const hasBrightness = bRow?.classList.contains('has-brightness');
+      const body = { value: true };
+      if (hasBrightness && slider) {
+        body.brightness = parseInt(slider.value);
+      }
+      fetch(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(name)}/power`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } else {
+      postAPI(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(name)}/power`, false);
+    }
   });
 });
 

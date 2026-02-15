@@ -237,7 +237,8 @@ func (app *App) TopicToEvent(topic, value string) string {
 // apiRequest is the JSON body for all POST endpoints.
 // "value" can be a bool (for power/quiet) or a number (for temperature).
 type apiRequest struct {
-	Value any `json:"value"`
+	Value      any  `json:"value"`
+	Brightness *int `json:"brightness,omitempty"` // optional, used when turning a light on
 }
 
 // readJSON reads and parses the JSON request body.
@@ -423,16 +424,36 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state := "OFF"
+	turningOn := false
 	if b, ok := req.Value.(bool); ok && b {
-		state = "ON"
+		turningOn = true
 	}
-	payload := `{"state":"` + state + `"}`
 
-	// Publish to every entity in this light group
+	// Publish to every entity in this light group.
+	// When turning ON with a brightness value, brightness-capable entities
+	// get {"state":"ON","brightness":N} so they start at the right level.
 	prefix := app.Config.MQTT.TopicPrefix
 	var errors []string
 	for _, entity := range light.Entities {
+		var payload string
+		if turningOn && req.Brightness != nil {
+			// Check if this entity supports brightness (has reported it before)
+			stateTopic := prefix + "/" + entity
+			supportsBrightness := false
+			if val, ok := app.MQTT.GetValue(stateTopic); ok {
+				ls := parseLightPayload(val)
+				supportsBrightness = ls.Brightness >= 0
+			}
+			if supportsBrightness {
+				payload = fmt.Sprintf(`{"state":"ON","brightness":%d}`, *req.Brightness)
+			} else {
+				payload = `{"state":"ON"}`
+			}
+		} else if turningOn {
+			payload = `{"state":"ON"}`
+		} else {
+			payload = `{"state":"OFF"}`
+		}
 		topic := light.SetTopic(prefix, entity)
 		if err := app.MQTT.Publish(topic, payload); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
@@ -490,16 +511,19 @@ func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
 
 	payload := fmt.Sprintf(`{"brightness":%d}`, brightness)
 
-	// Only publish to entities that support brightness (have reported it in cache).
+	// Only publish to entities that support brightness AND are currently ON.
+	// Dragging the slider must not turn on a light that is off.
 	prefix := app.Config.MQTT.TopicPrefix
 	var errors []string
 	for _, entity := range light.Entities {
 		stateTopic := prefix + "/" + entity
 		if val, ok := app.MQTT.GetValue(stateTopic); ok {
 			ls := parseLightPayload(val)
-			if ls.Brightness < 0 {
-				continue // entity doesn't support brightness
+			if ls.Brightness < 0 || !ls.On {
+				continue // entity doesn't support brightness or is off
 			}
+		} else {
+			continue // no cached state, skip
 		}
 		topic := light.SetTopic(prefix, entity)
 		if err := app.MQTT.Publish(topic, payload); err != nil {
