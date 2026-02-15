@@ -44,6 +44,7 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/heating/zone/{zone}/quiet", app.handleZoneQuiet)
 	mux.HandleFunc("POST /api/heating/room/{zone}/{room}/power", app.handleRoomPower)
 	mux.HandleFunc("POST /api/light/{zone}/{name}/power", app.handleLightPower)
+	mux.HandleFunc("POST /api/light/{zone}/{name}/brightness", app.handleLightBrightness)
 }
 
 // ---------- Page handler ----------
@@ -137,13 +138,19 @@ func (app *App) buildHeatingEvent(zoneName string, room HeatingRoom) string {
 // A light group may contain multiple zigbee2mqtt entities.
 // The "on" state uses any-on logic: if any entity is ON, the group is ON.
 // Only when all entities are OFF is the group OFF.
+// Brightness is included only if any entity reports it (max across entities).
 func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	on := false
+	brightness := -1
 	prefix := app.Config.MQTT.TopicPrefix
 	for _, entity := range light.Entities {
 		stateTopic := prefix + "/" + entity
 		if val, ok := app.MQTT.GetValue(stateTopic); ok {
-			on = on || parseLightState(val)
+			ls := parseLightPayload(val)
+			on = on || ls.On
+			if ls.Brightness >= 0 && ls.Brightness > brightness {
+				brightness = ls.Brightness
+			}
 		}
 	}
 
@@ -153,20 +160,43 @@ func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 		"name": light.Name,
 		"on":   on,
 	}
+	if brightness >= 0 {
+		event["brightness"] = brightness
+	}
 	data, _ := json.Marshal(event)
 	return string(data)
 }
 
-// parseLightState extracts the on/off state from a zigbee2mqtt state payload.
-// zigbee2mqtt publishes JSON like {"state":"ON",...} on the entity topic.
-func parseLightState(payload string) bool {
+// lightEntityState holds the parsed state of a single zigbee2mqtt entity.
+type lightEntityState struct {
+	On         bool
+	Brightness int // 0-254 if reported, -1 if not supported
+}
+
+// parseLightPayload extracts on/off state and optional brightness from
+// a zigbee2mqtt state payload. zigbee2mqtt publishes JSON like
+// {"state":"ON","brightness":254} on entity topics.
+func parseLightPayload(payload string) lightEntityState {
 	var msg struct {
-		State string `json:"state"`
+		State      string `json:"state"`
+		Brightness *int   `json:"brightness"`
 	}
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-		return false
+		return lightEntityState{Brightness: -1}
 	}
-	return msg.State == "ON"
+	ls := lightEntityState{
+		On:         msg.State == "ON",
+		Brightness: -1,
+	}
+	if msg.Brightness != nil {
+		ls.Brightness = *msg.Brightness
+	}
+	return ls
+}
+
+// parseLightState is a convenience wrapper that returns just the on/off bool.
+func parseLightState(payload string) bool {
+	return parseLightPayload(payload).On
 }
 
 // TopicToEvent converts an MQTT topic + value into a JSON SSE event string.
@@ -391,6 +421,65 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 	payload := `{"state":"` + state + `"}`
 
 	// Publish to every entity in this light group
+	prefix := app.Config.MQTT.TopicPrefix
+	var errors []string
+	for _, entity := range light.Entities {
+		topic := light.SetTopic(prefix, entity)
+		if err := app.MQTT.Publish(topic, payload); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
+		}
+	}
+
+	if len(errors) > 0 {
+		http.Error(w, strings.Join(errors, "; "), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleLightBrightness sets the brightness for a light group.
+// Publishes {"brightness": N} to all entities via zigbee2mqtt /set topics.
+func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
+	zoneName := r.PathValue("zone")
+	lightName := r.PathValue("name")
+
+	zone := app.findZone(zoneName)
+	if zone == nil {
+		http.Error(w, "zone not found", http.StatusNotFound)
+		return
+	}
+
+	var light *LightConfig
+	for i := range zone.Lights {
+		if zone.Lights[i].Name == lightName {
+			light = &zone.Lights[i]
+			break
+		}
+	}
+	if light == nil {
+		http.Error(w, "light not found", http.StatusNotFound)
+		return
+	}
+
+	req, err := readJSON(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	brightnessFloat, ok := req.Value.(float64)
+	if !ok {
+		http.Error(w, "value must be a number", http.StatusBadRequest)
+		return
+	}
+	brightness := int(brightnessFloat)
+	if brightness < 0 || brightness > 254 {
+		http.Error(w, "brightness must be 0-254", http.StatusBadRequest)
+		return
+	}
+
+	payload := fmt.Sprintf(`{"brightness":%d}`, brightness)
+
 	prefix := app.Config.MQTT.TopicPrefix
 	var errors []string
 	for _, entity := range light.Entities {

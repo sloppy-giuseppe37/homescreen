@@ -46,10 +46,12 @@ Heating rooms use a `unit_id` to construct three topics:
 - `HomeKit/{unit_id}_IndoorQuiet/Switch/On` — quiet (0/1)
 
 Lights use zigbee2mqtt topics. Each light has a list of entities. For each entity:
-- Subscribe: `{topic_prefix}/{entity}` — state payloads are JSON, e.g. `{"state":"ON"}`
-- Publish: `{topic_prefix}/{entity}/set` — command payloads are `{"state":"ON"}` or `{"state":"OFF"}`
+- Subscribe: `{topic_prefix}/{entity}` — state payloads are JSON, e.g. `{"state":"ON","brightness":254}`
+- Publish: `{topic_prefix}/{entity}/set` — command payloads are `{"state":"ON"}`, `{"state":"OFF"}`, or `{"brightness":128}`
 
 A light group with multiple entities uses **any-on logic**: the group shows ON if any entity is ON, and OFF only when all entities are OFF. Toggling a light publishes to ALL entities in the group.
+
+**Brightness** is optional per-light. Not all lights support it — only those whose zigbee2mqtt payload includes a `brightness` field (0-254) will show a brightness slider in the UI. For groups, the displayed brightness is the max across entities. Setting brightness publishes `{"brightness":N}` to all entities in the group.
 
 Config format uses `entities: [entity1, entity2]` (not a single `topic:` field).
 
@@ -75,10 +77,14 @@ POST /api/heating/zone/{zone}/temperature  {"value": 21}      → publishes to a
 POST /api/heating/zone/{zone}/quiet        {"value": true}    → publishes to all rooms
 POST /api/heating/room/{zone}/{room}/power {"value": true}    → single room
 POST /api/light/{zone}/{name}/power        {"value": true}    → single light
+POST /api/light/{zone}/{name}/brightness   {"value": 128}     → single light (0-254)
 GET  /api/events                           SSE stream
 ```
 
-SSE sends JSON per line: `data: {"type":"heating","zone":"...","room":"...","power":true,"target_temp":21.0,"quiet":false}`
+SSE sends JSON per line:
+- Heating: `data: {"type":"heating","zone":"...","room":"...","power":true,"target_temp":21.0,"quiet":false}`
+- Light (no brightness): `data: {"type":"light","zone":"...","name":"...","on":true}`
+- Light (with brightness): `data: {"type":"light","zone":"...","name":"...","on":true,"brightness":200}`
 
 On connect, sends a full snapshot (one event per room + light), then live deltas. Heartbeat comments (`: heartbeat`) sent every 15s.
 
@@ -105,7 +111,7 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 
-41 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
+49 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 

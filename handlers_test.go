@@ -452,3 +452,128 @@ func TestParseLightState(t *testing.T) {
 		}
 	}
 }
+
+// TestParseLightPayload verifies full payload parsing including brightness.
+func TestParseLightPayload(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    string
+		wantOn     bool
+		wantBright int
+	}{
+		{"on no brightness", `{"state":"ON"}`, true, -1},
+		{"off no brightness", `{"state":"OFF"}`, false, -1},
+		{"on with brightness", `{"state":"ON","brightness":200}`, true, 200},
+		{"off with brightness", `{"state":"OFF","brightness":0}`, false, 0},
+		{"brightness max", `{"state":"ON","brightness":254}`, true, 254},
+		{"invalid json", `not json`, false, -1},
+		{"empty", "", false, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseLightPayload(tt.payload)
+			if got.On != tt.wantOn {
+				t.Errorf("On = %v, want %v", got.On, tt.wantOn)
+			}
+			if got.Brightness != tt.wantBright {
+				t.Errorf("Brightness = %d, want %d", got.Brightness, tt.wantBright)
+			}
+		})
+	}
+}
+
+// TestBuildLightEvent_WithBrightness verifies brightness is included in event
+// when entities report it.
+func TestBuildLightEvent_WithBrightness(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"ON","brightness":200}`,
+		"zigbee2mqtt/ceiling": `{"state":"ON","brightness":150}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != true {
+		t.Errorf("on = %v, want true", event["on"])
+	}
+	// Should report max brightness across entities
+	if event["brightness"] != 200.0 {
+		t.Errorf("brightness = %v, want 200", event["brightness"])
+	}
+}
+
+// TestBuildLightEvent_NoBrightness verifies brightness is omitted when
+// entities don't report it.
+func TestBuildLightEvent_NoBrightness(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed": `{"state":"ON"}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if _, hasBrightness := event["brightness"]; hasBrightness {
+		t.Errorf("brightness should be omitted for lights that don't support it, got %v", event["brightness"])
+	}
+}
+
+// TestHandleLightBrightness_NotFound tests 404 for unknown light.
+func TestHandleLightBrightness_NotFound(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": 128}`
+	req := httptest.NewRequest("POST", "/api/light/Upstairs/NoSuchLight/brightness",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// TestHandleLightBrightness_BadValue tests 400 for non-numeric brightness.
+func TestHandleLightBrightness_BadValue(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": "bright"}`
+	req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/brightness",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// TestHandleLightBrightness_OutOfRange tests 400 for out-of-range brightness.
+func TestHandleLightBrightness_OutOfRange(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": 300}`
+	req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/brightness",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
