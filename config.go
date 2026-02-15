@@ -70,6 +70,12 @@ func (l LightConfig) SetTopic(prefix, entity string) string {
 	return prefix + "/" + entity + "/set"
 }
 
+// GetTopic returns the MQTT topic to request current state from an entity.
+// zigbee2mqtt responds by publishing the device's current state to the state topic.
+func (l LightConfig) GetTopic(prefix, entity string) string {
+	return prefix + "/" + entity + "/get"
+}
+
 // HeatingTopics returns the three MQTT topics for a heating unit.
 func (r HeatingRoom) HeatingTopics() (power, temp, quiet string) {
 	prefix := "HomeKit/" + r.UnitID

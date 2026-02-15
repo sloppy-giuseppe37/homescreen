@@ -40,6 +40,10 @@ Lives at `~/.config/homescreen/config.yaml` (searched first), `/usr/local/etc/ho
 
 ## MQTT topic patterns
 
+### Light state request on startup
+
+zigbee2mqtt doesn't retain light state messages by default. After subscribing to all topics, the server publishes `{"state":""}` to `{topic_prefix}/{entity}/get` for every light entity. zigbee2mqtt responds by publishing the device's current state to the state topic, which populates the cache before any browser connects. Mains-powered devices respond immediately; battery/sleepy devices may not respond until their next check-in.
+
 Heating rooms use a `unit_id` to construct three topics:
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetHeatingCoolingState` — power (0/1)
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetTemperature` — temp (e.g. "21.0")

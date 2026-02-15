@@ -8,7 +8,8 @@ package main
 //   - Notify listeners (SSE clients) when any value changes
 //
 // The cache is NOT persistent — if the server restarts, it rebuilds
-// from MQTT retained messages. The broker is the source of truth.
+// from MQTT retained messages (heating) and by requesting current state
+// from zigbee2mqtt devices (lights). The broker is the source of truth.
 
 import (
 	"fmt"
@@ -72,7 +73,9 @@ func NewMQTTClient(cfg *Config, onChange func(topic, value string)) (*MQTTClient
 }
 
 // subscribeAll subscribes to every MQTT topic we care about,
-// as defined in the config file.
+// as defined in the config file. After subscribing, it requests
+// current state from all light entities (zigbee2mqtt doesn't retain
+// state by default, so without this the cache is empty after restart).
 func (m *MQTTClient) subscribeAll() {
 	// Build a list of all topics we need to listen to
 	topics := m.allTopics()
@@ -88,6 +91,35 @@ func (m *MQTTClient) subscribeAll() {
 			log.Printf("MQTT: failed to subscribe to %s: %v", t, err)
 		} else {
 			log.Printf("MQTT: subscribed to %s", t)
+		}
+	}
+
+	// Request current state from all light entities.
+	// Heating topics use retained messages so they arrive with the subscription,
+	// but zigbee2mqtt light state is not retained — we must ask for it.
+	m.requestLightStates()
+}
+
+// requestLightStates publishes to {prefix}/{entity}/get for each light entity.
+// zigbee2mqtt responds by publishing the device's current state to the state topic,
+// which populates our cache.
+func (m *MQTTClient) requestLightStates() {
+	prefix := m.config.MQTT.TopicPrefix
+	for _, zone := range m.config.Zones {
+		for _, light := range zone.Lights {
+			for _, entity := range light.Entities {
+				topic := light.GetTopic(prefix, entity)
+				// Publishing {"state":""} to the /get topic asks zigbee2mqtt
+				// to report the device's current state.
+				payload := `{"state":""}`
+				token := m.client.Publish(topic, 0, false, payload)
+				token.Wait()
+				if err := token.Error(); err != nil {
+					log.Printf("MQTT: failed to request state from %s: %v", topic, err)
+				} else {
+					log.Printf("MQTT: requested state from %s", topic)
+				}
+			}
 		}
 	}
 }

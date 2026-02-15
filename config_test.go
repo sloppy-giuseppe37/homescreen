@@ -132,6 +132,18 @@ func TestLightSetTopic(t *testing.T) {
 	}
 }
 
+// TestLightGetTopic verifies that LightConfig.GetTopic()
+// constructs the correct MQTT get topic for requesting state.
+func TestLightGetTopic(t *testing.T) {
+	light := LightConfig{Name: "Kitchen", Entities: []string{"fairy_lights"}}
+	topic := light.GetTopic("zigbee2mqtt", "fairy_lights")
+
+	want := "zigbee2mqtt/fairy_lights/get"
+	if topic != want {
+		t.Errorf("get topic = %q, want %q", topic, want)
+	}
+}
+
 // TestLoadConfig_MissingFile verifies we get a clear error
 // when the config file doesn't exist.
 func TestLoadConfig_MissingFile(t *testing.T) {
