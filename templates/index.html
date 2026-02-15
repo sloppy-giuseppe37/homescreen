@@ -340,49 +340,42 @@
     .drawer .room-row:first-child { border-top: 1px solid var(--border); }
 
     /* ── Brightness Sliders ── */
-    .brightness-row {
-      padding: 12px 0;
-    }
-    .brightness-row + .brightness-row { border-top: 1px solid var(--border); }
-    .brightness-row:first-child { border-top: 1px solid var(--border); }
-    .brightness-label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-    .brightness-label i {
-      font-size: 16px;
-      color: var(--warm);
+    .light-drawer .brightness-row {
+      padding: 4px 0 10px;
     }
     .brightness-slider-row {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+    }
+    .brightness-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      white-space: nowrap;
     }
     .brightness-slider-row input[type=range] {
       flex: 1;
+      height: 6px;
+      border-radius: 3px;
     }
     .brightness-slider-row input[type=range]::-webkit-slider-thumb {
-      width: 26px; height: 26px;
+      width: 22px; height: 22px;
       background: var(--warm);
-      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
-      border: 3px solid var(--card);
+      box-shadow: 0 1px 6px rgba(245,158,11,0.35);
+      border: 2px solid var(--card);
     }
     .brightness-slider-row input[type=range]::-moz-range-thumb {
-      width: 26px; height: 26px;
+      width: 22px; height: 22px;
       background: var(--warm);
-      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
-      border: 3px solid var(--card);
+      box-shadow: 0 1px 6px rgba(245,158,11,0.35);
+      border: 2px solid var(--card);
     }
     .brightness-value {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
-      min-width: 40px;
+      min-width: 36px;
       text-align: right;
       white-space: nowrap;
     }
@@ -405,7 +398,7 @@
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
     {{range $zone := .Zones}}{{if $zone.Lights}}
-    <div class="card">
+    <div class="card light-card">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Brightness controls">
@@ -417,23 +410,18 @@
         <span class="room-label"><i class="icon-lamp"></i> {{.Name}}</span>
         <label class="toggle"><input type="checkbox" data-light="{{.Name}}" data-zone="{{$zone.Name}}"><span class="slider"></span></label>
       </div>
-      {{end}}
-      <div class="drawer">
+      <div class="drawer light-drawer">
         <div class="drawer-inner">
-          {{range $zone.Lights}}
           <div class="brightness-row" data-brightness-zone="{{$zone.Name}}" data-brightness-name="{{.Name}}">
-            <div class="brightness-label">
-              <i class="icon-sun"></i>
-              <span>{{.Name}}</span>
-            </div>
             <div class="brightness-slider-row">
+              <span class="brightness-label">Brightness</span>
               <input type="range" min="1" max="254" value="254" class="brightness-range" data-brightness-light="{{.Name}}" data-brightness-zone-input="{{$zone.Name}}">
               <span class="brightness-value">100%</span>
             </div>
           </div>
-          {{end}}
         </div>
       </div>
+      {{end}}
     </div>
     {{end}}{{end}}
   </div>
@@ -750,7 +738,9 @@ if (savedTab && document.getElementById(savedTab)) switchTab(savedTab);
 document.querySelectorAll('.drawer-toggle').forEach(btn => {
   btn.addEventListener('click', () => {
     btn.classList.toggle('open');
-    btn.closest('.card').querySelector('.drawer').classList.toggle('open');
+    const card = btn.closest('.card');
+    // Light cards have multiple drawers (one per light); heating cards have one.
+    card.querySelectorAll('.drawer').forEach(d => d.classList.toggle('open'));
   });
 });
 
