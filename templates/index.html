@@ -339,6 +339,54 @@
     .drawer-inner { overflow: hidden; }
     .drawer .room-row:first-child { border-top: 1px solid var(--border); }
 
+    /* ── Brightness Sliders ── */
+    .brightness-row {
+      padding: 12px 0;
+    }
+    .brightness-row + .brightness-row { border-top: 1px solid var(--border); }
+    .brightness-row:first-child { border-top: 1px solid var(--border); }
+    .brightness-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .brightness-label i {
+      font-size: 16px;
+      color: var(--warm);
+    }
+    .brightness-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brightness-slider-row input[type=range] {
+      flex: 1;
+    }
+    .brightness-slider-row input[type=range]::-webkit-slider-thumb {
+      width: 26px; height: 26px;
+      background: var(--warm);
+      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+      border: 3px solid var(--card);
+    }
+    .brightness-slider-row input[type=range]::-moz-range-thumb {
+      width: 26px; height: 26px;
+      background: var(--warm);
+      box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+      border: 3px solid var(--card);
+    }
+    .brightness-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      min-width: 40px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
     @media (min-width: 500px) {
       .shell { padding: 0 24px 72px; }
     }
@@ -358,13 +406,34 @@
   <div id="lights" class="tab-panel active">
     {{range $zone := .Zones}}{{if $zone.Lights}}
     <div class="card">
-      <div class="card-title">{{$zone.Name}}</div>
+      <div class="card-header">
+        <div class="card-title">{{$zone.Name}}</div>
+        <button class="drawer-toggle" aria-label="Brightness controls">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11.5L2.5 5h11L8 11.5z"/></svg>
+        </button>
+      </div>
       {{range $zone.Lights}}
       <div class="room-row" data-light-zone="{{$zone.Name}}" data-light-name="{{.Name}}">
         <span class="room-label"><i class="icon-lamp"></i> {{.Name}}</span>
         <label class="toggle"><input type="checkbox" data-light="{{.Name}}" data-zone="{{$zone.Name}}"><span class="slider"></span></label>
       </div>
       {{end}}
+      <div class="drawer">
+        <div class="drawer-inner">
+          {{range $zone.Lights}}
+          <div class="brightness-row" data-brightness-zone="{{$zone.Name}}" data-brightness-name="{{.Name}}">
+            <div class="brightness-label">
+              <i class="icon-sun"></i>
+              <span>{{.Name}}</span>
+            </div>
+            <div class="brightness-slider-row">
+              <input type="range" min="1" max="254" value="254" class="brightness-range" data-brightness-light="{{.Name}}" data-brightness-zone-input="{{$zone.Name}}">
+              <span class="brightness-value">100%</span>
+            </div>
+          </div>
+          {{end}}
+        </div>
+      </div>
     </div>
     {{end}}{{end}}
   </div>
@@ -684,6 +753,27 @@ document.querySelectorAll('.drawer-toggle').forEach(btn => {
     btn.closest('.card').querySelector('.drawer').classList.toggle('open');
   });
 });
+
+// --- Brightness sliders (UI-only for now) ---
+document.querySelectorAll('.brightness-range').forEach(slider => {
+  // Initialize track color
+  updateBrightnessTrack(slider);
+
+  slider.addEventListener('input', () => {
+    const pct = Math.round((slider.value / 254) * 100);
+    const valueLabel = slider.closest('.brightness-slider-row').querySelector('.brightness-value');
+    if (valueLabel) valueLabel.textContent = pct + '%';
+    updateBrightnessTrack(slider);
+  });
+});
+
+function updateBrightnessTrack(slider) {
+  const pct = ((slider.value - 1) / 253) * 100;
+  const trackBg = getComputedStyle(document.documentElement)
+    .getPropertyValue('--border').trim();
+  slider.style.background =
+    `linear-gradient(to right, #f59e0b ${pct}%, ${trackBg} ${pct}%)`;
+}
 
 // --- Prevent iOS zoom ---
 document.addEventListener('gesturestart', e => e.preventDefault());
