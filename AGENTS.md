@@ -153,3 +153,7 @@ To add a new device type (e.g. blinds):
 |---|---|---|
 | mosquitto | 1883 (localhost only) | `systemctl status mosquitto` |
 | homescreen | 8000 | `systemctl status homescreen` |
+
+## Workflow
+
+Always `git push` after finishing work if all tests pass.
