@@ -139,17 +139,25 @@ func (app *App) buildHeatingEvent(zoneName string, room HeatingRoom) string {
 // The "on" state uses any-on logic: if any entity is ON, the group is ON.
 // Only when all entities are OFF is the group OFF.
 // Brightness is included only if any entity reports it (max across entities).
+// "brightness_on" indicates whether any brightness-capable entity is ON
+// (used by the frontend to grey out the slider when all dimmable lights are off).
 func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	on := false
 	brightness := -1
+	brightnessOn := false
 	prefix := app.Config.MQTT.TopicPrefix
 	for _, entity := range light.Entities {
 		stateTopic := prefix + "/" + entity
 		if val, ok := app.MQTT.GetValue(stateTopic); ok {
 			ls := parseLightPayload(val)
 			on = on || ls.On
-			if ls.Brightness >= 0 && ls.Brightness > brightness {
-				brightness = ls.Brightness
+			if ls.Brightness >= 0 {
+				if ls.Brightness > brightness {
+					brightness = ls.Brightness
+				}
+				if ls.On {
+					brightnessOn = true
+				}
 			}
 		}
 	}
@@ -162,6 +170,7 @@ func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	}
 	if brightness >= 0 {
 		event["brightness"] = brightness
+		event["brightness_on"] = brightnessOn
 	}
 	data, _ := json.Marshal(event)
 	return string(data)
@@ -438,7 +447,8 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLightBrightness sets the brightness for a light group.
-// Publishes {"brightness": N} to all entities via zigbee2mqtt /set topics.
+// Only publishes to entities that support brightness (i.e., have previously
+// reported a brightness value in their state payload).
 func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
 	zoneName := r.PathValue("zone")
 	lightName := r.PathValue("name")
@@ -480,9 +490,17 @@ func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
 
 	payload := fmt.Sprintf(`{"brightness":%d}`, brightness)
 
+	// Only publish to entities that support brightness (have reported it in cache).
 	prefix := app.Config.MQTT.TopicPrefix
 	var errors []string
 	for _, entity := range light.Entities {
+		stateTopic := prefix + "/" + entity
+		if val, ok := app.MQTT.GetValue(stateTopic); ok {
+			ls := parseLightPayload(val)
+			if ls.Brightness < 0 {
+				continue // entity doesn't support brightness
+			}
+		}
 		topic := light.SetTopic(prefix, entity)
 		if err := app.MQTT.Publish(topic, payload); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))

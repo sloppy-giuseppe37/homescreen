@@ -375,6 +375,14 @@
       box-shadow: 0 1px 6px rgba(245,158,11,0.35);
       border: 2px solid var(--card);
     }
+    .brightness-row.brightness-off input[type=range]::-webkit-slider-thumb {
+      background: var(--text-muted);
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    }
+    .brightness-row.brightness-off input[type=range]::-moz-range-thumb {
+      background: var(--text-muted);
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    }
     .brightness-value {
       font-size: 12px;
       font-weight: 600;
@@ -584,8 +592,8 @@ function connectSSE() {
     else if (data.type === 'light') {
       // Store per-light state
       if (!state.lights[data.zone]) state.lights[data.zone] = {};
-      state.lights[data.zone][data.name] = { on: data.on, brightness: data.brightness };
-      updateLightUI(data.zone, data.name, data.on, data.brightness);
+      state.lights[data.zone][data.name] = { on: data.on, brightness: data.brightness, brightness_on: data.brightness_on };
+      updateLightUI(data.zone, data.name, data.on, data.brightness, data.brightness_on);
     }
   };
 }
@@ -646,7 +654,7 @@ function updateRoomToggle(zoneName, roomName, power) {
 }
 
 // Update a single light's toggle and optional brightness
-function updateLightUI(zoneName, lightName, on, brightness) {
+function updateLightUI(zoneName, lightName, on, brightness, brightnessOn) {
   if (!isSuppressed(`light:${zoneName}/${lightName}`)) {
     const toggle = document.querySelector(
       `input[data-light="${lightName}"][data-zone="${zoneName}"]`
@@ -664,6 +672,8 @@ function updateLightUI(zoneName, lightName, on, brightness) {
   );
   if (bRow && brightness !== undefined) {
     bRow.classList.add('has-brightness');
+    // Grey out slider when all brightness-capable entities are off
+    bRow.classList.toggle('brightness-off', brightnessOn === false);
     const slider = bRow.querySelector('.brightness-range');
     if (slider && !slider.matches(':active') && !isSuppressed(`light-bri:${zoneName}/${lightName}`)) {
       slider.value = brightness;
@@ -844,8 +854,10 @@ function updateBrightnessTrack(slider) {
   const pct = ((slider.value - 1) / 253) * 100;
   const trackBg = getComputedStyle(document.documentElement)
     .getPropertyValue('--border').trim();
+  const isOff = slider.closest('.brightness-row')?.classList.contains('brightness-off');
+  const fillColor = isOff ? 'var(--text-muted)' : '#f59e0b';
   slider.style.background =
-    `linear-gradient(to right, #f59e0b ${pct}%, ${trackBg} ${pct}%)`;
+    `linear-gradient(to right, ${fillColor} ${pct}%, ${trackBg} ${pct}%)`;
 }
 
 // --- Prevent iOS zoom ---
@@ -873,8 +885,8 @@ initialState.forEach(data => {
     updateRoomToggle(data.zone, data.room, data.power);
   } else if (data.type === 'light') {
     if (!state.lights[data.zone]) state.lights[data.zone] = {};
-    state.lights[data.zone][data.name] = { on: data.on, brightness: data.brightness };
-    updateLightUI(data.zone, data.name, data.on, data.brightness);
+    state.lights[data.zone][data.name] = { on: data.on, brightness: data.brightness, brightness_on: data.brightness_on };
+    updateLightUI(data.zone, data.name, data.on, data.brightness, data.brightness_on);
   }
 });
 

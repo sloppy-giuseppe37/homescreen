@@ -55,7 +55,7 @@ Lights use zigbee2mqtt topics. Each light has a list of entities. For each entit
 
 A light group with multiple entities uses **any-on logic**: the group shows ON if any entity is ON, and OFF only when all entities are OFF. Toggling a light publishes to ALL entities in the group.
 
-**Brightness** is optional per-light. Not all lights support it — only those whose zigbee2mqtt payload includes a `brightness` field (0-254) will show a brightness slider in the UI. For groups, the displayed brightness is the max across entities. Setting brightness publishes `{"brightness":N}` to all entities in the group.
+**Brightness** is optional per-entity (not per-light group). Not all entities in a group may support it — only those whose zigbee2mqtt payload includes a `brightness` field (0-254) will receive brightness commands. The UI shows a brightness slider when any entity in the group reports brightness. For groups, the displayed brightness is the max across entities that support it. Setting brightness publishes `{"brightness":N}` only to entities that have previously reported brightness in their cached state. The slider is colored grey when all brightness-capable entities are OFF, and orange when at least one is ON.
 
 Config format uses `entities: [entity1, entity2]` (not a single `topic:` field).
 
@@ -88,7 +88,9 @@ GET  /api/events                           SSE stream
 SSE sends JSON per line:
 - Heating: `data: {"type":"heating","zone":"...","room":"...","power":true,"target_temp":21.0,"quiet":false}`
 - Light (no brightness): `data: {"type":"light","zone":"...","name":"...","on":true}`
-- Light (with brightness): `data: {"type":"light","zone":"...","name":"...","on":true,"brightness":200}`
+- Light (with brightness): `data: {"type":"light","zone":"...","name":"...","on":true,"brightness":200,"brightness_on":true}`
+
+`brightness_on` indicates whether any brightness-capable entity in the group is ON (used to grey out the slider when all dimmable lights are off). Both `brightness` and `brightness_on` are omitted when no entity reports brightness.
 
 On connect, sends a full snapshot (one event per room + light), then live deltas. Heartbeat comments (`: heartbeat`) sent every 15s.
 

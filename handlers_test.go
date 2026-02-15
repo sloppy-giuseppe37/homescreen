@@ -482,8 +482,8 @@ func TestParseLightPayload(t *testing.T) {
 	}
 }
 
-// TestBuildLightEvent_WithBrightness verifies brightness is included in event
-// when entities report it.
+// TestBuildLightEvent_WithBrightness verifies brightness and brightness_on
+// are included in event when entities report brightness.
 func TestBuildLightEvent_WithBrightness(t *testing.T) {
 	app := testApp(map[string]string{
 		"zigbee2mqtt/bed":     `{"state":"ON","brightness":200}`,
@@ -502,10 +502,66 @@ func TestBuildLightEvent_WithBrightness(t *testing.T) {
 	if event["brightness"] != 200.0 {
 		t.Errorf("brightness = %v, want 200", event["brightness"])
 	}
+	// At least one brightness-capable entity is ON
+	if event["brightness_on"] != true {
+		t.Errorf("brightness_on = %v, want true", event["brightness_on"])
+	}
 }
 
-// TestBuildLightEvent_NoBrightness verifies brightness is omitted when
-// entities don't report it.
+// TestBuildLightEvent_BrightnessOff verifies brightness_on is false when
+// all brightness-capable entities are OFF (but brightness value is still reported).
+func TestBuildLightEvent_BrightnessOff(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"OFF","brightness":200}`,
+		"zigbee2mqtt/ceiling": `{"state":"OFF","brightness":150}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != false {
+		t.Errorf("on = %v, want false", event["on"])
+	}
+	if event["brightness"] != 200.0 {
+		t.Errorf("brightness = %v, want 200", event["brightness"])
+	}
+	if event["brightness_on"] != false {
+		t.Errorf("brightness_on = %v, want false", event["brightness_on"])
+	}
+}
+
+// TestBuildLightEvent_MixedBrightness verifies that when a group has some
+// entities with brightness and some without, brightness is only tracked for
+// entities that report it, and brightness_on reflects only those entities.
+func TestBuildLightEvent_MixedBrightness(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":     `{"state":"ON"}`,              // no brightness support
+		"zigbee2mqtt/ceiling": `{"state":"OFF","brightness":180}`, // brightness, but OFF
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	// Group is ON because bed is on (even though it has no brightness)
+	if event["on"] != true {
+		t.Errorf("on = %v, want true", event["on"])
+	}
+	// brightness from ceiling entity
+	if event["brightness"] != 180.0 {
+		t.Errorf("brightness = %v, want 180", event["brightness"])
+	}
+	// brightness_on is false because the only brightness-capable entity (ceiling) is OFF
+	if event["brightness_on"] != false {
+		t.Errorf("brightness_on = %v, want false", event["brightness_on"])
+	}
+}
+
+// TestBuildLightEvent_NoBrightness verifies brightness and brightness_on are
+// omitted when entities don't report brightness.
 func TestBuildLightEvent_NoBrightness(t *testing.T) {
 	app := testApp(map[string]string{
 		"zigbee2mqtt/bed": `{"state":"ON"}`,
@@ -518,6 +574,9 @@ func TestBuildLightEvent_NoBrightness(t *testing.T) {
 
 	if _, hasBrightness := event["brightness"]; hasBrightness {
 		t.Errorf("brightness should be omitted for lights that don't support it, got %v", event["brightness"])
+	}
+	if _, hasBrightnessOn := event["brightness_on"]; hasBrightnessOn {
+		t.Errorf("brightness_on should be omitted for lights that don't support brightness")
 	}
 }
 
