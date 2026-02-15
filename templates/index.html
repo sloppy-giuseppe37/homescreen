@@ -395,7 +395,7 @@
 <div class="shell">
   <header>
     <i class="icon-house"></i>
-    <h1>Home Control</h1>
+    <h1 id="page-title">Lights</h1>
 
   </header>
 
@@ -772,6 +772,9 @@ function switchTab(tabName) {
   if (tabName === 'heating') btn.classList.add('heating-active');
   document.getElementById(tabName).classList.add('active');
   localStorage.setItem('activeTab', tabName);
+  const title = tabName === 'heating' ? 'Heating' : 'Lights';
+  document.getElementById('page-title').textContent = title;
+  document.title = title;
 }
 
 tabBtns.forEach(btn => {
