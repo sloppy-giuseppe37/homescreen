@@ -402,7 +402,7 @@
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
     {{range $zone := .Zones}}{{if $zone.Lights}}
-    <div class="card light-card">
+    <div class="card light-card" data-light-zone-card="{{$zone.Name}}">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Brightness controls">
@@ -754,12 +754,32 @@ const savedTab = localStorage.getItem('activeTab');
 if (savedTab && document.getElementById(savedTab)) switchTab(savedTab);
 
 // --- Advanced drawers ---
+function drawerKey(card) {
+  const hz = card.dataset.heatingZone;
+  if (hz) return 'drawer:heating:' + hz;
+  const lz = card.dataset.lightZoneCard;
+  if (lz) return 'drawer:lights:' + lz;
+  return null;
+}
+
+function setDrawerOpen(card, btn, open) {
+  btn.classList.toggle('open', open);
+  card.querySelectorAll('.drawer').forEach(d => d.classList.toggle('open', open));
+}
+
 document.querySelectorAll('.drawer-toggle').forEach(btn => {
+  const card = btn.closest('.card');
+  const key = drawerKey(card);
+
+  // Restore saved state
+  if (key && localStorage.getItem(key) === '1') {
+    setDrawerOpen(card, btn, true);
+  }
+
   btn.addEventListener('click', () => {
-    btn.classList.toggle('open');
-    const card = btn.closest('.card');
-    // Light cards have multiple drawers (one per light); heating cards have one.
-    card.querySelectorAll('.drawer').forEach(d => d.classList.toggle('open'));
+    const opening = !btn.classList.contains('open');
+    setDrawerOpen(card, btn, opening);
+    if (key) localStorage.setItem(key, opening ? '1' : '0');
   });
 });
 
