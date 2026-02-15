@@ -499,6 +499,25 @@ const state = {
   lights: {}
 };
 
+// --- Optimistic UI suppression ---
+// When the user acts on a control that aggregates multiple MQTT entities,
+// SSE events arrive one-by-one and the intermediate aggregate values cause
+// flicker. We suppress DOM updates for the affected control for a short
+// window so the user sees their action stick until all entities settle.
+// Keys: e.g. "heat-temp:Upstairs", "light:Downstairs/Kitchen"
+// Values: timestamp (ms) when suppression expires.
+const _suppress = {};
+
+function suppress(key, ms) { _suppress[key] = Date.now() + (ms || 1500); }
+
+function isSuppressed(key) {
+  const until = _suppress[key];
+  if (!until) return false;
+  if (Date.now() < until) return true;
+  delete _suppress[key];
+  return false;
+}
+
 // --- SSE Connection ---
 // EventSource automatically reconnects if the connection drops.
 let evtSource = null;
@@ -596,7 +615,7 @@ function updateHeatingUI(zoneName) {
   // (but only if the user isn't currently dragging the slider)
   const slider = document.querySelector(`input[data-temp-zone="${zoneName}"]`);
   const display = document.getElementById(`temp-${zoneName}`);
-  if (slider && !slider.matches(':active')) {
+  if (slider && !slider.matches(':active') && !isSuppressed(`heat-temp:${zoneName}`)) {
     const rounded = Math.round(maxTemp);
     slider.value = rounded;
     updateSliderTrack(slider);
@@ -607,13 +626,14 @@ function updateHeatingUI(zoneName) {
 
   // Update quiet toggle
   const quietToggle = document.querySelector(`input[data-quiet-zone="${zoneName}"]`);
-  if (quietToggle) {
+  if (quietToggle && !isSuppressed(`heat-quiet:${zoneName}`)) {
     quietToggle.checked = allQuiet;
   }
 }
 
 // Update a single room's power toggle in the heating tab
 function updateRoomToggle(zoneName, roomName, power) {
+  if (isSuppressed(`heat-power:${zoneName}/${roomName}`)) return;
   const toggle = document.querySelector(
     `input[data-room="${roomName}"][data-zone="${zoneName}"]`
   );
@@ -627,13 +647,15 @@ function updateRoomToggle(zoneName, roomName, power) {
 
 // Update a single light's toggle and optional brightness
 function updateLightUI(zoneName, lightName, on, brightness) {
-  const toggle = document.querySelector(
-    `input[data-light="${lightName}"][data-zone="${zoneName}"]`
-  );
-  if (toggle) {
-    toggle.checked = on;
-    const icon = toggle.closest('.room-row')?.querySelector('i');
-    if (icon) icon.classList.toggle('lit', on);
+  if (!isSuppressed(`light:${zoneName}/${lightName}`)) {
+    const toggle = document.querySelector(
+      `input[data-light="${lightName}"][data-zone="${zoneName}"]`
+    );
+    if (toggle) {
+      toggle.checked = on;
+      const icon = toggle.closest('.room-row')?.querySelector('i');
+      if (icon) icon.classList.toggle('lit', on);
+    }
   }
 
   // Brightness: show slider only if the light reports brightness
@@ -643,7 +665,7 @@ function updateLightUI(zoneName, lightName, on, brightness) {
   if (bRow && brightness !== undefined) {
     bRow.classList.add('has-brightness');
     const slider = bRow.querySelector('.brightness-range');
-    if (slider && !slider.matches(':active')) {
+    if (slider && !slider.matches(':active') && !isSuppressed(`light-bri:${zoneName}/${lightName}`)) {
       slider.value = brightness;
       updateBrightnessTrack(slider);
       const pct = Math.round((brightness / 254) * 100);
@@ -693,6 +715,7 @@ document.querySelectorAll('input[data-temp-zone]').forEach(slider => {
     // Debounce the API call (300ms after user stops dragging)
     clearTimeout(tempTimers[zone]);
     tempTimers[zone] = setTimeout(() => {
+      suppress(`heat-temp:${zone}`, 2000);
       postAPI(`/api/heating/zone/${encodeURIComponent(zone)}/temperature`,
               parseInt(slider.value));
     }, 300);
@@ -706,6 +729,7 @@ document.querySelectorAll('input[data-temp-zone]').forEach(slider => {
 document.querySelectorAll('input[data-quiet-zone]').forEach(toggle => {
   toggle.addEventListener('change', () => {
     const zone = toggle.dataset.quietZone;
+    suppress(`heat-quiet:${zone}`, 2000);
     postAPI(`/api/heating/zone/${encodeURIComponent(zone)}/quiet`,
             toggle.checked);
   });
@@ -716,6 +740,9 @@ document.querySelectorAll('input[data-room]').forEach(toggle => {
   toggle.addEventListener('change', () => {
     const zone = toggle.dataset.zone;
     const room = toggle.dataset.room;
+    suppress(`heat-power:${zone}/${room}`, 1500);
+    suppress(`heat-temp:${zone}`, 1500);
+    suppress(`heat-quiet:${zone}`, 1500);
     postAPI(`/api/heating/room/${encodeURIComponent(zone)}/${encodeURIComponent(room)}/power`,
             toggle.checked);
   });
@@ -726,6 +753,7 @@ document.querySelectorAll('input[data-light]').forEach(toggle => {
   toggle.addEventListener('change', () => {
     const zone = toggle.dataset.zone;
     const name = toggle.dataset.light;
+    suppress(`light:${zone}/${name}`, 1500);
     postAPI(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(name)}/power`,
             toggle.checked);
   });
@@ -799,9 +827,10 @@ document.querySelectorAll('.brightness-range').forEach(slider => {
     updateBrightnessTrack(slider);
 
     // Debounce the API call (300ms)
-    const key = zone + '/' + light;
-    clearTimeout(brightnessTimers[key]);
-    brightnessTimers[key] = setTimeout(() => {
+    const bKey = zone + '/' + light;
+    clearTimeout(brightnessTimers[bKey]);
+    brightnessTimers[bKey] = setTimeout(() => {
+      suppress(`light-bri:${zone}/${light}`, 2000);
       postAPI(`/api/light/${encodeURIComponent(zone)}/${encodeURIComponent(light)}/brightness`,
               parseInt(slider.value));
     }, 300);
