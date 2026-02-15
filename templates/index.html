@@ -376,12 +376,12 @@
       border: 2px solid var(--card);
     }
     .brightness-row.brightness-off input[type=range]::-webkit-slider-thumb {
-      background: var(--text-muted);
-      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+      background: var(--border);
+      box-shadow: none;
     }
     .brightness-row.brightness-off input[type=range]::-moz-range-thumb {
-      background: var(--text-muted);
-      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+      background: var(--border);
+      box-shadow: none;
     }
     .brightness-value {
       font-size: 12px;
@@ -855,7 +855,7 @@ function updateBrightnessTrack(slider) {
   const trackBg = getComputedStyle(document.documentElement)
     .getPropertyValue('--border').trim();
   const isOff = slider.closest('.brightness-row')?.classList.contains('brightness-off');
-  const fillColor = isOff ? 'var(--text-muted)' : '#f59e0b';
+  const fillColor = isOff ? trackBg : '#f59e0b';
   slider.style.background =
     `linear-gradient(to right, ${fillColor} ${pct}%, ${trackBg} ${pct}%)`;
 }
