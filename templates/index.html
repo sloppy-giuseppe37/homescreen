@@ -178,6 +178,11 @@
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
+    /* ── Column headers (hidden on mobile) ── */
+    .column-header {
+      display: none;
+    }
+
     /* ── Cards ── */
     .card {
       background: var(--card);
@@ -415,13 +420,6 @@
       .tab-panel {
         display: contents !important;
       }
-      /* Zone cards use data attributes for row assignment */
-      /* Each zone gets its own row (starting at row 2 since header is row 1) */
-      .card[data-zone-index="0"] { grid-row: 2; }
-      .card[data-zone-index="1"] { grid-row: 3; }
-      .card[data-zone-index="2"] { grid-row: 4; }
-      .card[data-zone-index="3"] { grid-row: 5; }
-      .card[data-zone-index="4"] { grid-row: 6; }
       /* Light cards go in column 1 */
       .light-card {
         grid-column: 1;
@@ -430,6 +428,28 @@
       .card[data-heating-zone] {
         grid-column: 2;
       }
+      /* Column headers (desktop only) */
+      .column-header {
+        display: block;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        padding: 0 0 8px;
+      }
+      .column-header-lights {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .column-header-heating {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      /* Shift zone cards down one row to make room for column headers */
+      .card[data-zone-index="0"] { grid-row: 3; }
+      .card[data-zone-index="1"] { grid-row: 4; }
+      .card[data-zone-index="2"] { grid-row: 5; }
+      .card[data-zone-index="3"] { grid-row: 6; }
+      .card[data-zone-index="4"] { grid-row: 7; }
     }
   </style>
 </head>
@@ -442,6 +462,10 @@
     <h1 id="page-title">Lights</h1>
 
   </header>
+
+  <!-- Column headers (desktop only) -->
+  <h2 class="column-header column-header-lights">Lights</h2>
+  <h2 class="column-header column-header-heating">Heating</h2>
 
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
