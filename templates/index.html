@@ -413,8 +413,7 @@
         align-items: start;
       }
       .shell > header {
-        grid-column: 1 / -1;
-        grid-row: 1;
+        display: none;
       }
       .tabs { display: none; }
       .tab-panel {
@@ -431,25 +430,25 @@
       /* Column headers (desktop only) */
       .column-header {
         display: block;
-        font-size: 18px;
+        font-size: 22px;
         font-weight: 700;
         letter-spacing: -0.3px;
-        padding: 0 0 8px;
+        padding: 24px 0 20px;
       }
       .column-header-lights {
         grid-column: 1;
-        grid-row: 2;
+        grid-row: 1;
       }
       .column-header-heating {
         grid-column: 2;
-        grid-row: 2;
+        grid-row: 1;
       }
-      /* Shift zone cards down one row to make room for column headers */
-      .card[data-zone-index="0"] { grid-row: 3; }
-      .card[data-zone-index="1"] { grid-row: 4; }
-      .card[data-zone-index="2"] { grid-row: 5; }
-      .card[data-zone-index="3"] { grid-row: 6; }
-      .card[data-zone-index="4"] { grid-row: 7; }
+      /* Zone cards in rows 2+ */
+      .card[data-zone-index="0"] { grid-row: 2; }
+      .card[data-zone-index="1"] { grid-row: 3; }
+      .card[data-zone-index="2"] { grid-row: 4; }
+      .card[data-zone-index="3"] { grid-row: 5; }
+      .card[data-zone-index="4"] { grid-row: 6; }
     }
   </style>
 </head>
