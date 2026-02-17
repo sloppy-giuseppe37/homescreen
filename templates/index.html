@@ -395,6 +395,42 @@
     @media (min-width: 500px) {
       .shell { padding: 0 24px 72px; }
     }
+
+    /* ── Desktop: side-by-side columns with aligned zones ── */
+    @media (min-width: 1024px) {
+      .shell {
+        display: grid;
+        grid-template-columns: 480px 480px;
+        column-gap: 32px;
+        row-gap: 14px;
+        max-width: 1024px;
+        padding: 0 32px 32px;
+        align-items: start;
+      }
+      .shell > header {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+      .tabs { display: none; }
+      .tab-panel {
+        display: contents !important;
+      }
+      /* Zone cards use data attributes for row assignment */
+      /* Each zone gets its own row (starting at row 2 since header is row 1) */
+      .card[data-zone-index="0"] { grid-row: 2; }
+      .card[data-zone-index="1"] { grid-row: 3; }
+      .card[data-zone-index="2"] { grid-row: 4; }
+      .card[data-zone-index="3"] { grid-row: 5; }
+      .card[data-zone-index="4"] { grid-row: 6; }
+      /* Light cards go in column 1 */
+      .light-card {
+        grid-column: 1;
+      }
+      /* Heating cards go in column 2 */
+      .card[data-heating-zone] {
+        grid-column: 2;
+      }
+    }
   </style>
 </head>
 <body>
@@ -409,8 +445,8 @@
 
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
-    {{range $zone := .Zones}}{{if $zone.Lights}}
-    <div class="card light-card" data-light-zone-card="{{$zone.Name}}">
+    {{range $idx, $zone := .Zones}}{{if $zone.Lights}}
+    <div class="card light-card" data-light-zone-card="{{$zone.Name}}" data-zone-index="{{$idx}}">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Brightness controls">
@@ -440,8 +476,8 @@
 
   <!-- ═══ HEATING TAB ═══ -->
   <div id="heating" class="tab-panel">
-    {{range $zone := .Zones}}{{if $zone.Heating}}
-    <div class="card" data-heating-zone="{{$zone.Name}}">
+    {{range $idx, $zone := .Zones}}{{if $zone.Heating}}
+    <div class="card" data-heating-zone="{{$zone.Name}}" data-zone-index="{{$idx}}">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Advanced settings">
@@ -791,6 +827,21 @@ document.querySelectorAll('input[data-light]').forEach(toggle => {
 const tabBtns = document.querySelectorAll('.tab-btn');
 const panels  = document.querySelectorAll('.tab-panel');
 
+function isDesktopLayout() {
+  return window.matchMedia('(min-width: 1024px)').matches;
+}
+
+function updatePageTitle(tabName) {
+  if (isDesktopLayout()) {
+    document.getElementById('page-title').textContent = 'Home Control';
+    document.title = 'Home Control';
+  } else {
+    const title = tabName === 'heating' ? 'Heating' : 'Lights';
+    document.getElementById('page-title').textContent = title;
+    document.title = title;
+  }
+}
+
 function switchTab(tabName) {
   tabBtns.forEach(b => b.classList.remove('active', 'heating-active'));
   panels.forEach(p => p.classList.remove('active'));
@@ -800,9 +851,7 @@ function switchTab(tabName) {
   if (tabName === 'heating') btn.classList.add('heating-active');
   document.getElementById(tabName).classList.add('active');
   localStorage.setItem('activeTab', tabName);
-  const title = tabName === 'heating' ? 'Heating' : 'Lights';
-  document.getElementById('page-title').textContent = title;
-  document.title = title;
+  updatePageTitle(tabName);
 }
 
 tabBtns.forEach(btn => {
@@ -811,6 +860,13 @@ tabBtns.forEach(btn => {
 
 const savedTab = localStorage.getItem('activeTab');
 if (savedTab && document.getElementById(savedTab)) switchTab(savedTab);
+else updatePageTitle('lights'); // initial title for desktop
+
+// Update title when window resizes (desktop <-> mobile)
+window.addEventListener('resize', () => {
+  const activeTab = localStorage.getItem('activeTab') || 'lights';
+  updatePageTitle(activeTab);
+});
 
 // --- Advanced drawers ---
 function drawerKey(card) {
