@@ -51,7 +51,10 @@ Heating rooms use a `unit_id` to construct three topics:
 
 Lights use zigbee2mqtt topics. Each light has a list of entities. For each entity:
 - Subscribe: `{topic_prefix}/{entity}` — state payloads are JSON, e.g. `{"state":"ON","brightness":254}`
+- Subscribe: `{topic_prefix}/{entity}/availability` — availability payloads are JSON `{"state":"online"}` / `{"state":"offline"}` or plain strings `online` / `offline`
 - Publish: `{topic_prefix}/{entity}/set` — command payloads are `{"state":"ON"}`, `{"state":"OFF"}`, or `{"brightness":128}`
+
+**Unavailable entities** are treated as OFF for display purposes. If an entity's availability topic reports `offline`, it is skipped in the any-on logic, brightness aggregation, and brightness_on calculation. Entities with no availability message in the cache are assumed available (default). Commands are still sent to unavailable entities (they take effect when the device reconnects).
 
 A light group with multiple entities uses **any-on logic**: the group shows ON if any entity is ON, and OFF only when all entities are OFF. Toggling a light publishes to ALL entities in the group.
 

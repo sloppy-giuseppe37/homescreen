@@ -76,6 +76,16 @@ func (l LightConfig) GetTopic(prefix, entity string) string {
 	return prefix + "/" + entity + "/get"
 }
 
+// AvailabilityTopics returns the MQTT availability topics for each entity.
+// zigbee2mqtt publishes availability to "{prefix}/{entity}/availability".
+func (l LightConfig) AvailabilityTopics(prefix string) []string {
+	topics := make([]string, len(l.Entities))
+	for i, e := range l.Entities {
+		topics[i] = prefix + "/" + e + "/availability"
+	}
+	return topics
+}
+
 // HeatingTopics returns the three MQTT topics for a heating unit.
 func (r HeatingRoom) HeatingTopics() (power, temp, quiet string) {
 	prefix := "HomeKit/" + r.UnitID

@@ -147,6 +147,10 @@ func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	brightnessOn := false
 	prefix := app.Config.MQTT.TopicPrefix
 	for _, entity := range light.Entities {
+		// Skip unavailable entities — treat them as OFF
+		if !app.isEntityAvailable(prefix, entity) {
+			continue
+		}
 		stateTopic := prefix + "/" + entity
 		if val, ok := app.MQTT.GetValue(stateTopic); ok {
 			ls := parseLightPayload(val)
@@ -174,6 +178,22 @@ func (app *App) buildLightEvent(zoneName string, light LightConfig) string {
 	}
 	data, _ := json.Marshal(event)
 	return string(data)
+}
+
+// isEntityAvailable checks whether a zigbee2mqtt entity is available.
+// It reads the cached availability topic. Returns false if the cached value
+// indicates offline/unavailable, true otherwise (including when no availability
+// message has been received — we assume available by default).
+func (app *App) isEntityAvailable(prefix, entity string) bool {
+	availTopic := prefix + "/" + entity + "/availability"
+	if val, ok := app.MQTT.GetValue(availTopic); ok {
+		// zigbee2mqtt publishes either JSON {"state":"offline"} or plain "offline"
+		val = strings.TrimSpace(strings.ToLower(val))
+		if val == "offline" || strings.Contains(val, `"offline"`) {
+			return false
+		}
+	}
+	return true
 }
 
 // lightEntityState holds the parsed state of a single zigbee2mqtt entity.
@@ -224,6 +244,12 @@ func (app *App) TopicToEvent(topic, value string) string {
 		for _, light := range zone.Lights {
 			for _, stateTopic := range light.StateTopics(app.Config.MQTT.TopicPrefix) {
 				if topic == stateTopic {
+					return app.buildLightEvent(zone.Name, light)
+				}
+			}
+			// Check light entity availability topics
+			for _, availTopic := range light.AvailabilityTopics(app.Config.MQTT.TopicPrefix) {
+				if topic == availTopic {
 					return app.buildLightEvent(zone.Name, light)
 				}
 			}

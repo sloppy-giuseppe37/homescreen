@@ -636,3 +636,141 @@ func TestHandleLightBrightness_OutOfRange(t *testing.T) {
 		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
+
+// TestBuildLightEvent_UnavailableEntity verifies that an unavailable entity
+// is treated as OFF — it doesn't contribute to the group's on state.
+func TestBuildLightEvent_UnavailableEntity(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":                  `{"state":"ON"}`,
+		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
+		"zigbee2mqtt/ceiling":               `{"state":"OFF"}`,
+		"zigbee2mqtt/ceiling/availability":   `{"state":"online"}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	// bed is ON but unavailable → skipped; ceiling is OFF and available → group is OFF
+	if event["on"] != false {
+		t.Errorf("on = %v, want false (unavailable entity should be treated as off)", event["on"])
+	}
+}
+
+// TestBuildLightEvent_UnavailablePlainString verifies that the plain string
+// "offline" (not JSON) is also recognized as unavailable.
+func TestBuildLightEvent_UnavailablePlainString(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
+		"zigbee2mqtt/bed/availability":      "offline",
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != false {
+		t.Errorf("on = %v, want false", event["on"])
+	}
+	// Brightness should not be reported for unavailable entity
+	if _, has := event["brightness"]; has {
+		t.Errorf("brightness should be omitted for unavailable entity, got %v", event["brightness"])
+	}
+}
+
+// TestBuildLightEvent_MixedAvailability verifies correct behavior when a group
+// has one available and one unavailable entity.
+func TestBuildLightEvent_MixedAvailability(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
+		"zigbee2mqtt/bed/availability":      `{"state":"online"}`,
+		"zigbee2mqtt/ceiling":               `{"state":"ON","brightness":150}`,
+		"zigbee2mqtt/ceiling/availability":   `{"state":"offline"}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	// bed is available and ON → group is ON
+	if event["on"] != true {
+		t.Errorf("on = %v, want true", event["on"])
+	}
+	// Only bed's brightness counts (ceiling is unavailable)
+	if event["brightness"] != 200.0 {
+		t.Errorf("brightness = %v, want 200 (only available entity)", event["brightness"])
+	}
+	if event["brightness_on"] != true {
+		t.Errorf("brightness_on = %v, want true", event["brightness_on"])
+	}
+}
+
+// TestBuildLightEvent_NoAvailabilityMessage verifies that entities with no
+// availability message in the cache are assumed available (default behavior).
+func TestBuildLightEvent_NoAvailabilityMessage(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed": `{"state":"ON"}`,
+		// No availability topic cached for bed
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	// No availability info → assumed available → ON
+	if event["on"] != true {
+		t.Errorf("on = %v, want true (no availability message should mean available)", event["on"])
+	}
+}
+
+// TestTopicToEvent_Availability verifies that an availability topic change
+// triggers a light event re-emission.
+func TestTopicToEvent_Availability(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":                  `{"state":"ON"}`,
+		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
+	})
+
+	// An availability change for "bed" should produce a light event
+	eventJSON := app.TopicToEvent("zigbee2mqtt/bed/availability", `{"state":"offline"}`)
+	if eventJSON == "" {
+		t.Fatal("TopicToEvent returned empty for availability topic")
+	}
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["type"] != "light" {
+		t.Errorf("type = %v, want 'light'", event["type"])
+	}
+	if event["on"] != false {
+		t.Errorf("on = %v, want false (entity is offline)", event["on"])
+	}
+}
+
+// TestBuildLightEvent_AllUnavailable verifies that when all entities are
+// unavailable, the light group reports as OFF.
+func TestBuildLightEvent_AllUnavailable(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
+		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
+		"zigbee2mqtt/ceiling":               `{"state":"ON","brightness":150}`,
+		"zigbee2mqtt/ceiling/availability":   `{"state":"offline"}`,
+	})
+
+	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["on"] != false {
+		t.Errorf("on = %v, want false (all entities unavailable)", event["on"])
+	}
+	if _, has := event["brightness"]; has {
+		t.Errorf("brightness should be omitted when all entities unavailable")
+	}
+}

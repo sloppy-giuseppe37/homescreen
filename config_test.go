@@ -200,3 +200,26 @@ zones:
 		t.Fatal("expected error for missing broker, got nil")
 	}
 }
+
+func TestLightAvailabilityTopics(t *testing.T) {
+	light := LightConfig{
+		Name:     "Kitchen",
+		Entities: []string{"fairy_lights", "kitchen_table_1"},
+	}
+
+	topics := light.AvailabilityTopics("zigbee2mqtt")
+
+	expected := []string{
+		"zigbee2mqtt/fairy_lights/availability",
+		"zigbee2mqtt/kitchen_table_1/availability",
+	}
+
+	if len(topics) != len(expected) {
+		t.Fatalf("got %d topics, want %d", len(topics), len(expected))
+	}
+	for i, topic := range topics {
+		if topic != expected[i] {
+			t.Errorf("topic[%d] = %q, want %q", i, topic, expected[i])
+		}
+	}
+}
