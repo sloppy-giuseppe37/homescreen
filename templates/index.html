@@ -823,6 +823,9 @@ document.querySelectorAll('input[data-light]').forEach(toggle => {
     const zone = toggle.dataset.zone;
     const name = toggle.dataset.light;
     suppress(`light:${zone}/${name}`, 1500);
+    // Update icon immediately (checkbox already updates via native behavior)
+    const icon = toggle.closest('.room-row')?.querySelector('i');
+    if (icon) icon.classList.toggle('lit', toggle.checked);
 
     if (toggle.checked) {
       // When turning on, include current slider brightness if available
