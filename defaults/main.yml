@@ -7,12 +7,8 @@ homescreen_repo_url: "https://sloppy-giuseppe37.github.io/homescreen"
 # Path to the signing public key file (relative to role's files/ directory)
 homescreen_pubkey_file: "homescreen.pub"
 
-# Enable automatic upgrades via cron
+# Enable automatic upgrades via cron (runs every 5 minutes)
 homescreen_autoupdate_enabled: true
-
-# Cron interval for auto-updates (every 5 minutes by default)
-homescreen_autoupdate_cron_minute: "*/5"
-homescreen_autoupdate_cron_hour: "*"
 
 # MQTT configuration
 homescreen_mqtt_broker: "tcp://localhost:1883"

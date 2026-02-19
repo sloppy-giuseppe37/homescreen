@@ -59,8 +59,7 @@
 - name: Configure auto-update cron job
   ansible.builtin.cron:
     name: "homescreen auto-update"
-    minute: "{{ homescreen_autoupdate_cron_minute }}"
-    hour: "{{ homescreen_autoupdate_cron_hour }}"
+    minute: "*/5"
     job: "/usr/local/sbin/homescreen-autoupdate.sh"
     user: root
   when: homescreen_autoupdate_enabled
