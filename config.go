@@ -33,6 +33,7 @@ type MQTTConfig struct {
 // Each zone can have heating units and/or lights.
 type ZoneConfig struct {
 	Name    string         `yaml:"name"`
+	Secret  bool           `yaml:"secret"`  // if true, hidden unless user enables secret mode
 	Heating []HeatingRoom  `yaml:"heating"` // may be empty
 	Lights  []LightConfig  `yaml:"lights"`  // may be empty
 }

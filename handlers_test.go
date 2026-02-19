@@ -52,7 +52,10 @@ func fakeMQTTClient(cache map[string]string) *MQTTClient {
 
 // testApp creates an App wired up for testing (no real MQTT connection).
 func testApp(cache map[string]string) *App {
-	cfg := testConfig()
+	return testAppWithConfig(testConfig(), cache)
+}
+
+func testAppWithConfig(cfg *Config, cache map[string]string) *App {
 	tmpl := template.Must(template.ParseFiles("templates/index.html"))
 	return &App{
 		Config:      cfg,
@@ -772,5 +775,93 @@ func TestBuildLightEvent_AllUnavailable(t *testing.T) {
 	}
 	if _, has := event["brightness"]; has {
 		t.Errorf("brightness should be omitted when all entities unavailable")
+	}
+}
+
+// TestHandleIndex_SecretZone verifies that secret zones get the secret-zone
+// CSS class in rendered HTML, while non-secret zones do not.
+func TestHandleIndex_SecretZone(t *testing.T) {
+	cfg := &Config{
+		MQTT: MQTTConfig{Broker: "tcp://localhost:1883", TopicPrefix: "zigbee2mqtt"},
+		Zones: []ZoneConfig{
+			{
+				Name:   "Public",
+				Secret: false,
+				Heating: []HeatingRoom{{Name: "Room1", UnitID: "Room1Faikin"}},
+			},
+			{
+				Name:   "SecretLair",
+				Secret: true,
+				Heating: []HeatingRoom{{Name: "Bunker", UnitID: "BunkerFaikin"}},
+				Lights:  []LightConfig{{Name: "HiddenLight", Entities: []string{"hidden1"}}},
+			},
+		},
+	}
+	app := testAppWithConfig(cfg, nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+
+	// Secret zone should have secret-zone class
+	if !strings.Contains(body, `class="card secret-zone"`) && !strings.Contains(body, `class="card light-card secret-zone"`) {
+		t.Error("secret zone missing 'secret-zone' CSS class")
+	}
+
+	// Public zone should NOT have secret-zone class (check it has data-heating-zone but no secret-zone)
+	if strings.Contains(body, `data-heating-zone="Public"`) {
+		// Find the card div for Public - it should not have secret-zone
+		if strings.Contains(body, `class="card secret-zone" data-heating-zone="Public"`) {
+			t.Error("non-secret zone has 'secret-zone' CSS class")
+		}
+	}
+
+	// Zone names should be present in the HTML
+	if !strings.Contains(body, "Public") {
+		t.Error("Public zone name missing from rendered HTML")
+	}
+	if !strings.Contains(body, "SecretLair") {
+		t.Error("SecretLair zone name missing from rendered HTML")
+	}
+}
+
+// TestHandleIndex_SecretZoneLightsAndHeating verifies both light and heating
+// cards get the secret-zone class for secret zones.
+func TestHandleIndex_SecretZoneLightsAndHeating(t *testing.T) {
+	cfg := &Config{
+		MQTT: MQTTConfig{Broker: "tcp://localhost:1883", TopicPrefix: "zigbee2mqtt"},
+		Zones: []ZoneConfig{
+			{
+				Name:    "HiddenZone",
+				Secret:  true,
+				Heating: []HeatingRoom{{Name: "SecretRoom", UnitID: "SecretFaikin"}},
+				Lights:  []LightConfig{{Name: "SecretLight", Entities: []string{"secret_bulb"}}},
+			},
+		},
+	}
+	app := testAppWithConfig(cfg, nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	body := w.Body.String()
+
+	// Count occurrences of secret-zone class - should be 2 (one for heating, one for lights)
+	count := strings.Count(body, "secret-zone")
+	if count < 2 {
+		t.Errorf("expected at least 2 occurrences of 'secret-zone' class (heating + lights), got %d", count)
 	}
 }

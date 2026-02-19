@@ -66,7 +66,15 @@ zones:
         entities:
           - KitchenLight1
           - KitchenLight2          # multiple entities = light group
+
+  - name: Secret Lair
+    secret: true                   # hidden unless user enables secret mode
+    heating:
+      - name: Bunker
+        unit_id: BunkerFaikin
 ```
+
+**Zones** can optionally be marked `secret: true`. Secret zones are hidden from the UI by default. Users can reveal them by quickly tapping the "Lights" or "Heating" header 13 times in rapid succession. This toggles a flag in localStorage that persists across page loads.
 
 **Heating** rooms use a `unit_id` to construct three MQTT topics per room:
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetHeatingCoolingState` — on/off (0/1)

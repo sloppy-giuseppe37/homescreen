@@ -450,6 +450,10 @@
       .card[data-zone-index="3"] { grid-row: 5; }
       .card[data-zone-index="4"] { grid-row: 6; }
     }
+
+    /* Secret zones: hidden by default, shown when body has .secret-mode */
+    .secret-zone { display: none !important; }
+    body.secret-mode .secret-zone { display: block !important; }
   </style>
 </head>
 <body>
@@ -469,7 +473,7 @@
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">
     {{range $idx, $zone := .Zones}}{{if $zone.Lights}}
-    <div class="card light-card" data-light-zone-card="{{$zone.Name}}" data-zone-index="{{$idx}}">
+    <div class="card light-card{{if $zone.Secret}} secret-zone{{end}}" data-light-zone-card="{{$zone.Name}}" data-zone-index="{{$idx}}">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Brightness controls">
@@ -500,7 +504,7 @@
   <!-- ═══ HEATING TAB ═══ -->
   <div id="heating" class="tab-panel">
     {{range $idx, $zone := .Zones}}{{if $zone.Heating}}
-    <div class="card" data-heating-zone="{{$zone.Name}}" data-zone-index="{{$idx}}">
+    <div class="card{{if $zone.Secret}} secret-zone{{end}}" data-heating-zone="{{$zone.Name}}" data-zone-index="{{$idx}}">
       <div class="card-header">
         <div class="card-title">{{$zone.Name}}</div>
         <button class="drawer-toggle" aria-label="Advanced settings">
@@ -556,6 +560,50 @@
 //   3. Computes zone-level values (temperature, quiet) from
 //      per-room state received via SSE
 // ============================================================
+
+// --- Secret Mode ---
+// Secret zones are hidden by default. Users can toggle secret mode by
+// quickly tapping the "Lights" or "Heating" header 13 times in succession.
+// State is persisted in localStorage.
+function isSecretMode() {
+  return localStorage.getItem('secret') === 'true';
+}
+
+function toggleSecretMode() {
+  const newValue = !isSecretMode();
+  localStorage.setItem('secret', newValue ? 'true' : 'false');
+  document.body.classList.toggle('secret-mode', newValue);
+}
+
+// Apply secret mode on load
+if (isSecretMode()) {
+  document.body.classList.add('secret-mode');
+}
+
+// Tap counter for secret mode activation
+const _secretTap = { count: 0, lastTap: 0 };
+const SECRET_TAP_THRESHOLD = 13;
+const SECRET_TAP_TIMEOUT_MS = 500;
+
+function handleSecretTap() {
+  const now = Date.now();
+  if (now - _secretTap.lastTap < SECRET_TAP_TIMEOUT_MS) {
+    _secretTap.count++;
+  } else {
+    _secretTap.count = 1;
+  }
+  _secretTap.lastTap = now;
+  
+  if (_secretTap.count >= SECRET_TAP_THRESHOLD) {
+    _secretTap.count = 0;
+    toggleSecretMode();
+  }
+}
+
+// Attach tap handlers to headers (desktop column headers + mobile tab buttons)
+document.querySelectorAll('.column-header, .tab-btn').forEach(el => {
+  el.addEventListener('click', handleSecretTap);
+});
 
 // --- State ---
 // We keep a local mirror of the state received from the server.

@@ -38,6 +38,10 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 
 Lives at `~/.config/homescreen/config.yaml` (searched first), `/usr/local/etc/homescreen.yaml` (FreeBSD), or `/etc/homescreen.yaml` (system). Defines MQTT broker address and zone/room/light mappings. The HTML template renders from this config, so it's the single source of truth for what rooms exist.
 
+## Secret zones
+
+Zones can be marked `secret: true` in config. Secret zones are hidden from the UI by default. Users can reveal them by quickly tapping the "Lights" or "Heating" header (column header on desktop, tab button on mobile) 13 times in rapid succession (<500ms between taps). This toggles a `secret` flag in localStorage, and the page adds/removes a `secret-mode` class on the body. Secret zones have a `secret-zone` CSS class that's hidden unless `body.secret-mode` is present.
+
 ## MQTT topic patterns
 
 ### Light state request on startup

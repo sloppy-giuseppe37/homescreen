@@ -223,3 +223,61 @@ func TestLightAvailabilityTopics(t *testing.T) {
 		}
 	}
 }
+
+func TestZoneSecretFlag(t *testing.T) {
+	// Create a temp home directory with the config file
+	tmpHome := t.TempDir()
+	configDir := filepath.Join(tmpHome, ".config", "homescreen")
+	os.MkdirAll(configDir, 0755)
+
+	yamlContent := `
+mqtt:
+  broker: "tcp://localhost:1883"
+  topic_prefix: "zigbee2mqtt"
+
+zones:
+  - name: Public
+    heating:
+      - name: Room1
+        unit_id: Room1Faikin
+  - name: SecretLair
+    secret: true
+    heating:
+      - name: Bunker
+        unit_id: BunkerFaikin
+  - name: AlsoPublic
+    secret: false
+    lights:
+      - name: Lamp
+        entities: [lamp1]
+`
+	os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(yamlContent), 0644)
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+
+	if len(cfg.Zones) != 3 {
+		t.Fatalf("got %d zones, want 3", len(cfg.Zones))
+	}
+
+	// Public zone: secret should be false (default)
+	if cfg.Zones[0].Secret {
+		t.Errorf("Zones[0] (Public) Secret = true, want false")
+	}
+
+	// SecretLair zone: secret should be true
+	if !cfg.Zones[1].Secret {
+		t.Errorf("Zones[1] (SecretLair) Secret = false, want true")
+	}
+
+	// AlsoPublic zone: explicit false
+	if cfg.Zones[2].Secret {
+		t.Errorf("Zones[2] (AlsoPublic) Secret = true, want false")
+	}
+}
