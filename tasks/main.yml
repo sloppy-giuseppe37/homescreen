@@ -6,18 +6,21 @@
     path: /usr/local/etc/pkg/keys
     state: directory
     mode: "0755"
+  tags: [homescreen, homescreen.repo]
 
 - name: Create pkg repos directory
   ansible.builtin.file:
     path: /usr/local/etc/pkg/repos
     state: directory
     mode: "0755"
+  tags: [homescreen, homescreen.repo]
 
 - name: Install homescreen repo signing key
   ansible.builtin.copy:
     src: "{{ homescreen_pubkey_file }}"
     dest: /usr/local/etc/pkg/keys/homescreen.pub
     mode: "0644"
+  tags: [homescreen, homescreen.repo]
 
 - name: Configure homescreen pkg repository
   ansible.builtin.template:
@@ -25,16 +28,19 @@
     dest: /usr/local/etc/pkg/repos/homescreen.conf
     mode: "0644"
   notify: Update pkg catalog
+  tags: [homescreen, homescreen.repo]
 
 - name: Update pkg catalog
   ansible.builtin.command: pkg update
   changed_when: false
+  tags: [homescreen, homescreen.repo]
 
 - name: Install homescreen package
   community.general.pkgng:
     name: homescreen
     state: present
   notify: Restart homescreen
+  tags: [homescreen, homescreen.install]
 
 - name: Install homescreen config file
   ansible.builtin.template:
@@ -42,12 +48,14 @@
     dest: /usr/local/etc/homescreen.yaml
     mode: "0644"
   notify: Restart homescreen
+  tags: [homescreen, homescreen.config]
 
 - name: Enable homescreen service
   ansible.builtin.service:
     name: homescreen
     enabled: true
   notify: Start homescreen
+  tags: [homescreen, homescreen.service]
 
 - name: Install auto-update script
   ansible.builtin.copy:
@@ -55,6 +63,7 @@
     dest: /usr/local/sbin/homescreen-autoupdate.sh
     mode: "0755"
   when: homescreen_autoupdate_enabled
+  tags: [homescreen, homescreen.autoupdate]
 
 - name: Configure auto-update cron job
   ansible.builtin.cron:
@@ -63,6 +72,7 @@
     job: "/usr/local/sbin/homescreen-autoupdate.sh"
     user: root
   when: homescreen_autoupdate_enabled
+  tags: [homescreen, homescreen.autoupdate]
 
 - name: Remove auto-update cron job
   ansible.builtin.cron:
@@ -70,9 +80,11 @@
     state: absent
     user: root
   when: not homescreen_autoupdate_enabled
+  tags: [homescreen, homescreen.autoupdate]
 
 - name: Remove auto-update script
   ansible.builtin.file:
     path: /usr/local/sbin/homescreen-autoupdate.sh
     state: absent
   when: not homescreen_autoupdate_enabled
+  tags: [homescreen, homescreen.autoupdate]
