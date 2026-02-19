@@ -1,0 +1,19 @@
+---
+# meta/main.yml - role metadata
+
+galaxy_info:
+  author: homescreen
+  description: Install and configure homescreen smart home control panel on FreeBSD
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: FreeBSD
+      versions:
+        - "13"
+        - "14"
+  galaxy_tags:
+    - freebsd
+    - smarthome
+    - mqtt
+
+dependencies: []

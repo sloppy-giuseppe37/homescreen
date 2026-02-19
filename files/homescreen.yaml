@@ -1,0 +1,16 @@
+# Homescreen configuration
+# Customize this file for your setup
+
+mqtt:
+  broker: "tcp://localhost:1883"
+  topic_prefix: zigbee2mqtt
+
+zones:
+  - name: Example Zone
+    heating:
+      - name: Living Room
+        unit_id: LivingRoomFaikin
+    lights:
+      - name: Living Room
+        entities:
+          - LivingRoomLight

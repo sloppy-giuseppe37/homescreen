@@ -1,0 +1,6 @@
+# PLACEHOLDER: Replace this file with the actual homescreen repo public key
+# Generate a keypair with:
+#   openssl genrsa -out repo.key 2048
+#   openssl rsa -in repo.key -pubout -out homescreen.pub
+# The private key (repo.key) goes in GitHub Actions secrets.
+# This public key goes here.
