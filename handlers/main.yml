@@ -9,7 +9,6 @@
   ansible.builtin.service:
     name: homescreen
     state: restarted
-  when: ansible_facts.services['homescreen'] is defined
   tags: [homescreen, homescreen.service]
 
 - name: Start homescreen
