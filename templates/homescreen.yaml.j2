@@ -1,0 +1,9 @@
+# Homescreen configuration
+# Managed by Ansible
+
+mqtt:
+  broker: "{{ homescreen_mqtt_broker }}"
+  topic_prefix: "{{ homescreen_mqtt_prefix }}"
+
+zones:
+{{ homescreen_zones | to_nice_yaml | indent(2, first=true) }}

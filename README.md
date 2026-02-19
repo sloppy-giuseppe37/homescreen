@@ -16,31 +16,64 @@ Installs and configures the homescreen smart home control panel on FreeBSD.
 | `homescreen_autoupdate_enabled` | `true` | Enable automatic upgrades via cron |
 | `homescreen_autoupdate_cron_minute` | `*/5` | Cron minute spec for auto-updates |
 | `homescreen_autoupdate_cron_hour` | `*` | Cron hour spec for auto-updates |
+| `homescreen_mqtt_broker` | `tcp://localhost:1883` | MQTT broker address |
+| `homescreen_mqtt_prefix` | `zigbee2mqtt` | MQTT topic prefix for lights |
+| `homescreen_zones` | `[]` | Zone/room/light configuration (see below) |
 
-## Files to Customize
+## Setup
 
-Before using this role, you must:
+Before using this role:
 
 1. **Replace `files/homescreen.pub`** with the actual repository signing public key
-2. **Edit `files/homescreen.yaml`** with your actual zone/room/light configuration
+2. **Define `homescreen_zones`** in your `host_vars/` or `group_vars/`
 
 ## What This Role Does
 
 1. Creates pkg repository directories and installs the signing key
 2. Configures the homescreen pkg repository
 3. Installs the `homescreen` package
-4. Deploys the config file to `/usr/local/etc/homescreen.yaml`
+4. Generates and deploys the config file to `/usr/local/etc/homescreen.yaml`
 5. Enables the homescreen service
 6. (Optional) Sets up a cron job for automatic upgrades every 5 minutes
 
-## Example Playbook
+## Example
 
+**playbook.yml:**
 ```yaml
 - hosts: home-server
   roles:
-    - role: homescreen
-      vars:
-        homescreen_autoupdate_enabled: true
+    - homescreen
+```
+
+**host_vars/home-server.yml:**
+```yaml
+homescreen_mqtt_broker: "tcp://localhost:1883"
+homescreen_mqtt_prefix: "zigbee2mqtt"
+
+homescreen_zones:
+  - name: Upstairs
+    heating:
+      - name: Bedroom
+        unit_id: BedroomFaikin
+      - name: Guest Room
+        unit_id: GuestFaikin
+    lights:
+      - name: Bedroom
+        entities:
+          - BedroomLight
+      - name: Hallway
+        entities:
+          - HallLight1
+          - HallLight2
+
+  - name: Downstairs
+    heating:
+      - name: Living Room
+        unit_id: LivingRoomFaikin
+    lights:
+      - name: Kitchen
+        entities:
+          - KitchenLight
 ```
 
 ## Auto-Update Behavior

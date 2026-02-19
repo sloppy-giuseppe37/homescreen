@@ -37,8 +37,8 @@
   notify: Restart homescreen
 
 - name: Install homescreen config file
-  ansible.builtin.copy:
-    src: homescreen.yaml
+  ansible.builtin.template:
+    src: homescreen.yaml.j2
     dest: /usr/local/etc/homescreen.yaml
     mode: "0644"
   notify: Restart homescreen
