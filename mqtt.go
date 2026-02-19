@@ -16,6 +16,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -47,7 +48,7 @@ func NewMQTTClient(cfg *Config, onChange func(topic, value string)) (*MQTTClient
 	// Configure the MQTT client options
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(cfg.MQTT.Broker)
-	opts.SetClientID("homescreen-server")
+	opts.SetClientID(fmt.Sprintf("homescreen-%d", time.Now().UnixNano()))
 	opts.SetAutoReconnect(true)
 
 	// When we first connect (or reconnect), subscribe to all topics.

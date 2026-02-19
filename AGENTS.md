@@ -135,7 +135,7 @@ The binary embeds `templates/index.html` and the entire `static/` directory via 
 ## Important gotchas
 
 - **Use `text/template`, not `html/template`**: The HTML template contains complex JavaScript with template literals (backtick strings). Go's `html/template` contextual escaper corrupts the `<script>` content, silently truncating the output. `text/template` works correctly. This is safe because all template data comes from our own config, not user input.
-- **MQTT client ID conflicts**: Each test creates its own MQTT client. Mosquitto disconnects existing clients when a new client connects with the same ID. The paho library uses auto-reconnect to handle this, but you'll see "connection lost: EOF" in test logs — that's expected.
+- **MQTT client ID conflicts**: The server generates a unique client ID using a nanosecond timestamp (`homescreen-{UnixNano}`), so multiple instances can run simultaneously. Tests also generate unique IDs. You may still see "connection lost: EOF" in test logs if clients disconnect — that's expected.
 - **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).
 - **SSE heartbeats**: The server sends `: heartbeat\n\n` every 15 seconds. Without this, proxies (Caddy, exe.dev proxy) and mobile Safari kill idle TCP connections after ~30s.
