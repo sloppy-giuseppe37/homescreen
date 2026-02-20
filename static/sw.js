@@ -1,4 +1,5 @@
-const CACHE_NAME = 'homecontrol-v4';
+const CACHE_NAME = 'homecontrol-v5';
+const FETCH_TIMEOUT_MS = 5000;
 const OFFLINE_URL = '/static/offline.html';
 
 // Assets to pre-cache for offline support
@@ -29,11 +30,28 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Fetch with a timeout - if the server doesn't respond in time, reject.
+// This handles firewall-blocked connections that hang instead of failing.
+function fetchWithTimeout(request, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(request, { signal: controller.signal })
+    .then((response) => {
+      clearTimeout(timeoutId);
+      return response;
+    })
+    .catch((err) => {
+      clearTimeout(timeoutId);
+      throw err;
+    });
+}
+
 self.addEventListener('fetch', (event) => {
   // Only handle navigation requests (HTML pages) for offline fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).then((response) => {
+      fetchWithTimeout(event.request, FETCH_TIMEOUT_MS).then((response) => {
         // If the server (or a reverse proxy like Caddy) returns a server
         // error, treat it the same as a network failure — show the offline
         // skeleton page instead of a raw error.
