@@ -31,18 +31,27 @@ type MQTTClient struct {
 	cacheMu sync.RWMutex
 	cache   map[string]string
 
+	// connected tracks whether we have an active MQTT connection.
+	connectedMu sync.RWMutex
+	connected   bool
+
 	// onChange is called whenever a topic value changes.
 	// The SSE broadcaster plugs in here to push updates to browsers.
 	onChange func(topic, value string)
+
+	// onConnectionLost is called when the MQTT connection drops.
+	// The main app uses this to disconnect SSE clients.
+	onConnectionLost func()
 }
 
 // NewMQTTClient creates a new client, connects to the broker, and subscribes
 // to all topics defined in the config.
-func NewMQTTClient(cfg *Config, onChange func(topic, value string)) (*MQTTClient, error) {
+func NewMQTTClient(cfg *Config, onChange func(topic, value string), onConnectionLost func()) (*MQTTClient, error) {
 	m := &MQTTClient{
-		config:   cfg,
-		cache:    make(map[string]string),
-		onChange: onChange,
+		config:           cfg,
+		cache:            make(map[string]string),
+		onChange:         onChange,
+		onConnectionLost: onConnectionLost,
 	}
 
 	// Configure the MQTT client options
@@ -57,11 +66,20 @@ func NewMQTTClient(cfg *Config, onChange func(topic, value string)) (*MQTTClient
 	// This ensures we re-subscribe after a broker restart.
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
 		log.Printf("MQTT: connected to %s", cfg.MQTT.Broker)
+		m.connectedMu.Lock()
+		m.connected = true
+		m.connectedMu.Unlock()
 		m.subscribeAll()
 	})
 
 	opts.SetConnectionLostHandler(func(c mqtt.Client, err error) {
 		log.Printf("MQTT: connection lost: %v", err)
+		m.connectedMu.Lock()
+		m.connected = false
+		m.connectedMu.Unlock()
+		if m.onConnectionLost != nil {
+			m.onConnectionLost()
+		}
 	})
 
 	// Create and connect
@@ -188,4 +206,11 @@ func (m *MQTTClient) Publish(topic, value string) error {
 // Disconnect cleanly shuts down the MQTT connection.
 func (m *MQTTClient) Disconnect() {
 	m.client.Disconnect(250) // wait up to 250ms for in-flight messages
+}
+
+// IsConnected returns whether the MQTT client has an active connection.
+func (m *MQTTClient) IsConnected() bool {
+	m.connectedMu.RLock()
+	defer m.connectedMu.RUnlock()
+	return m.connected
 }

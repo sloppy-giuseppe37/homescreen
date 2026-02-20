@@ -46,6 +46,8 @@ func main() {
 	// The onChange callback is called for every MQTT message.
 	// It converts the raw topic+value into a JSON event and
 	// broadcasts it to all connected browsers.
+	// The onConnectionLost callback disconnects all SSE clients
+	// so they trigger the offline UI flow.
 	var app *App // forward declaration so the callback can use it
 
 	mqttClient, err := NewMQTTClient(cfg, func(topic, value string) {
@@ -57,6 +59,9 @@ func main() {
 		if eventJSON != "" {
 			broadcaster.Broadcast(eventJSON)
 		}
+	}, func() {
+		// MQTT connection lost — disconnect all SSE clients to trigger offline UI
+		broadcaster.DisconnectAll()
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect to MQTT: %v", err)

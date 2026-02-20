@@ -55,6 +55,10 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 // renders with correct values immediately — no flash of defaults
 // while waiting for the SSE connection to deliver state.
 func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if !app.MQTT.IsConnected() {
+		http.Error(w, "MQTT broker unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := PageData{
 		Config:       app.Config,
@@ -88,6 +92,10 @@ func (app *App) buildSnapshot() string {
 // handleSSE opens an SSE stream to the browser.
 // First it sends a snapshot of all current state, then streams changes.
 func (app *App) handleSSE(w http.ResponseWriter, r *http.Request) {
+	if !app.MQTT.IsConnected() {
+		http.Error(w, "MQTT broker unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	app.Broadcaster.ServeHTTP(w, r, func(ch chan string) {
 		// Send current state for every heating room and every light
 		for _, zone := range app.Config.Zones {
@@ -276,6 +284,16 @@ func readJSON(r *http.Request) (apiRequest, error) {
 	return req, nil
 }
 
+// checkMQTT returns true if MQTT is connected, false otherwise.
+// If disconnected, it writes a 503 response.
+func (app *App) checkMQTT(w http.ResponseWriter) bool {
+	if !app.MQTT.IsConnected() {
+		http.Error(w, "MQTT broker unavailable", http.StatusServiceUnavailable)
+		return false
+	}
+	return true
+}
+
 // findZone looks up a zone by name in the config.
 func (app *App) findZone(name string) *ZoneConfig {
 	for i := range app.Config.Zones {
@@ -289,6 +307,9 @@ func (app *App) findZone(name string) *ZoneConfig {
 // handleZoneTemperature sets the target temperature for ALL rooms in a zone.
 // This is because the UI has one slider per zone, not per room.
 func (app *App) handleZoneTemperature(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	zoneName := r.PathValue("zone")
 	zone := app.findZone(zoneName)
 	if zone == nil {
@@ -328,6 +349,9 @@ func (app *App) handleZoneTemperature(w http.ResponseWriter, r *http.Request) {
 
 // handleZoneQuiet sets quiet mode for ALL rooms in a zone.
 func (app *App) handleZoneQuiet(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	zoneName := r.PathValue("zone")
 	zone := app.findZone(zoneName)
 	if zone == nil {
@@ -365,6 +389,9 @@ func (app *App) handleZoneQuiet(w http.ResponseWriter, r *http.Request) {
 
 // handleRoomPower turns a single room's heating on or off.
 func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	zoneName := r.PathValue("zone")
 	roomName := r.PathValue("room")
 
@@ -422,6 +449,9 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 // handleLightPower turns a light group on or off.
 // Publishes to all entities in the group via zigbee2mqtt /set topics.
 func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	zoneName := r.PathValue("zone")
 	lightName := r.PathValue("name")
 
@@ -497,6 +527,9 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 // Only publishes to entities that support brightness (i.e., have previously
 // reported a brightness value in their state payload).
 func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	zoneName := r.PathValue("zone")
 	lightName := r.PathValue("name")
 

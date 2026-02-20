@@ -40,9 +40,16 @@ func testConfig() *Config {
 
 // fakeMQTTClient creates a minimal MQTTClient with a pre-populated cache
 // and no actual MQTT connection. Good for testing handlers in isolation.
+// By default, the fake client reports as connected.
 func fakeMQTTClient(cache map[string]string) *MQTTClient {
+	return fakeMQTTClientWithConnected(cache, true)
+}
+
+// fakeMQTTClientWithConnected creates a fake MQTT client with explicit connected state.
+func fakeMQTTClientWithConnected(cache map[string]string, connected bool) *MQTTClient {
 	m := &MQTTClient{
-		cache: make(map[string]string),
+		cache:     make(map[string]string),
+		connected: connected,
 	}
 	for k, v := range cache {
 		m.cache[k] = v
@@ -60,6 +67,17 @@ func testAppWithConfig(cfg *Config, cache map[string]string) *App {
 	return &App{
 		Config:      cfg,
 		MQTT:        fakeMQTTClient(cache),
+		Broadcaster: NewSSEBroadcaster(),
+		Template:    tmpl,
+	}
+}
+
+// testAppDisconnected creates an App where MQTT reports as disconnected.
+func testAppDisconnected() *App {
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
+	return &App{
+		Config:      testConfig(),
+		MQTT:        fakeMQTTClientWithConnected(nil, false),
 		Broadcaster: NewSSEBroadcaster(),
 		Template:    tmpl,
 	}
@@ -863,5 +881,152 @@ func TestHandleIndex_SecretZoneLightsAndHeating(t *testing.T) {
 	count := strings.Count(body, "secret-zone")
 	if count < 2 {
 		t.Errorf("expected at least 2 occurrences of 'secret-zone' class (heating + lights), got %d", count)
+	}
+}
+
+// ---------- MQTT disconnected (503) tests ----------
+
+// TestHandleIndex_503WhenMQTTDisconnected verifies that GET / returns 503
+// when MQTT is disconnected.
+func TestHandleIndex_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleSSE_503WhenMQTTDisconnected verifies that GET /api/events returns 503
+// when MQTT is disconnected.
+func TestHandleSSE_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/api/events", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleZoneTemperature_503WhenMQTTDisconnected verifies POST returns 503.
+func TestHandleZoneTemperature_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": 21}`
+	req := httptest.NewRequest("POST", "/api/heating/zone/Upstairs/temperature",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleZoneQuiet_503WhenMQTTDisconnected verifies POST returns 503.
+func TestHandleZoneQuiet_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": true}`
+	req := httptest.NewRequest("POST", "/api/heating/zone/Upstairs/quiet",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleRoomPower_503WhenMQTTDisconnected verifies POST returns 503.
+func TestHandleRoomPower_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": true}`
+	req := httptest.NewRequest("POST", "/api/heating/room/Upstairs/Bedroom/power",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleLightPower_503WhenMQTTDisconnected verifies POST returns 503.
+func TestHandleLightPower_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": true}`
+	req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/power",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleLightBrightness_503WhenMQTTDisconnected verifies POST returns 503.
+func TestHandleLightBrightness_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"value": 128}`
+	req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/brightness",
+		bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestHandleIndex_200WhenMQTTConnected verifies normal operation when connected.
+func TestHandleIndex_200WhenMQTTConnected(t *testing.T) {
+	app := testApp(nil) // default is connected
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
 	}
 }

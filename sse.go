@@ -55,6 +55,21 @@ func (b *SSEBroadcaster) removeClient(ch chan string) {
 	log.Printf("SSE: client disconnected (%d remaining)", count)
 }
 
+// DisconnectAll closes all SSE client connections.
+// This is used when MQTT connection is lost to trigger the offline UI.
+func (b *SSEBroadcaster) DisconnectAll() {
+	b.mu.Lock()
+	count := len(b.clients)
+	for ch := range b.clients {
+		close(ch)
+		delete(b.clients, ch)
+	}
+	b.mu.Unlock()
+	if count > 0 {
+		log.Printf("SSE: disconnected all clients (%d) due to MQTT connection loss", count)
+	}
+}
+
 // Broadcast sends a JSON string to all connected clients.
 // If a client's buffer is full (it's too slow), we skip it
 // rather than blocking the whole system.

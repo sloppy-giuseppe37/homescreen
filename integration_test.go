@@ -49,7 +49,7 @@ func integrationApp(t *testing.T) (*App, func()) {
 				broadcaster.Broadcast(eventJSON)
 			}
 		}
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("MQTT connect failed (is mosquitto running?): %v", err)
 	}

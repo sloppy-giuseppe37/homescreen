@@ -114,3 +114,66 @@ func TestSSEBroadcaster_NoClients(t *testing.T) {
 	// Should not panic
 	b.Broadcast(`{"test": true}`)
 }
+
+// TestSSEBroadcaster_DisconnectAll verifies that DisconnectAll
+// closes all client channels and removes them from the set.
+func TestSSEBroadcaster_DisconnectAll(t *testing.T) {
+	b := NewSSEBroadcaster()
+
+	// Add three clients
+	ch1 := b.addClient()
+	ch2 := b.addClient()
+	ch3 := b.addClient()
+
+	b.mu.Lock()
+	if len(b.clients) != 3 {
+		t.Errorf("expected 3 clients, got %d", len(b.clients))
+	}
+	b.mu.Unlock()
+
+	// Disconnect all
+	b.DisconnectAll()
+
+	// All clients should be removed
+	b.mu.Lock()
+	if len(b.clients) != 0 {
+		t.Errorf("expected 0 clients after DisconnectAll, got %d", len(b.clients))
+	}
+	b.mu.Unlock()
+
+	// All channels should be closed (reading returns immediately with zero value)
+	select {
+	case _, ok := <-ch1:
+		if ok {
+			t.Error("ch1 should be closed")
+		}
+	default:
+		t.Error("ch1 should be closed and readable")
+	}
+
+	select {
+	case _, ok := <-ch2:
+		if ok {
+			t.Error("ch2 should be closed")
+		}
+	default:
+		t.Error("ch2 should be closed and readable")
+	}
+
+	select {
+	case _, ok := <-ch3:
+		if ok {
+			t.Error("ch3 should be closed")
+		}
+	default:
+		t.Error("ch3 should be closed and readable")
+	}
+}
+
+// TestSSEBroadcaster_DisconnectAll_Empty verifies DisconnectAll
+// doesn't panic when there are no clients.
+func TestSSEBroadcaster_DisconnectAll_Empty(t *testing.T) {
+	b := NewSSEBroadcaster()
+	// Should not panic
+	b.DisconnectAll()
+}
