@@ -21,7 +21,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 
 | File | Responsibility |
 |---|---|
-| `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/` and `static/` via `go:embed`. Serves `/static/` from embedded FS and `/sw.js` from root path (for service worker scope). |
+| `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/`, `static/`, and `docs/` via `go:embed`. Serves `/static/` from embedded FS, `/sw.js` from root path (for service worker scope), and `/help/` for user documentation. |
 | `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
@@ -34,6 +34,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `static/lucide.css` | Vendored Lucide icon font CSS. |
 | `static/fonts/` | Vendored font files: Inter TTFs + Lucide woff2/woff/ttf. |
 | `static/icons/` | PWA icons: `icon-192.png`, `icon-512.png` (house icon on orange). |
+| `docs/` | User documentation served at `/help/`. Contains `README.md` (markdown), `index.html` (renders markdown client-side), and `images/` (screenshots). Embedded in binary via `go:embed`. |
 | `homescreen.service` | systemd unit. Runs on port 8000, after mosquitto. |
 
 ## Config
@@ -93,6 +94,7 @@ POST /api/light/{zone}/{name}/power        {"value": true}    → single light
 POST /api/light/{zone}/{name}/power        {"value": true, "brightness": 128} → with initial brightness
 POST /api/light/{zone}/{name}/brightness   {"value": 128}     → single light (0-254), only ON entities
 GET  /api/events                           SSE stream
+GET  /help/                                User documentation (HTML)
 ```
 
 SSE sends JSON per line:

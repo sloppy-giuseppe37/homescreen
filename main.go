@@ -25,6 +25,9 @@ var templateFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
+//go:embed docs
+var docsFS embed.FS
+
 func main() {
 	// --- Load configuration ---
 	cfg, err := LoadConfig()
@@ -94,6 +97,17 @@ func main() {
 		w.Header().Set("Cache-Control", "no-cache")
 		data, _ := staticFS.ReadFile("static/sw.js")
 		w.Write(data)
+	})
+
+	// Serve user documentation at /help
+	docsSub, err := fs.Sub(docsFS, "docs")
+	if err != nil {
+		log.Fatalf("Failed to create docs sub-fs: %v", err)
+	}
+	docsHandler := http.FileServer(http.FS(docsSub))
+	mux.Handle("GET /help/", http.StripPrefix("/help/", docsHandler))
+	mux.HandleFunc("GET /help", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/help/", http.StatusMovedPermanently)
 	})
 
 	// --- Start the server ---
