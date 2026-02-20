@@ -1,6 +1,10 @@
 # Homescreen configuration
 # Managed by Ansible
 
+{% if homescreen_base_url is defined %}
+base_url: "{{ homescreen_base_url }}"
+{% endif %}
+
 mqtt:
   broker: "{{ homescreen_mqtt_broker }}"
   topic_prefix: "{{ homescreen_mqtt_prefix }}"

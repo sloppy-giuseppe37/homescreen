@@ -10,6 +10,9 @@ homescreen_pubkey_file: "homescreen.pub"
 # Enable automatic upgrades via cron (runs every 5 minutes)
 homescreen_autoupdate_enabled: true
 
+# Base URL of the app (optional, for PWA manifest)
+# homescreen_base_url: "https://home.example.com:8000"
+
 # MQTT configuration
 homescreen_mqtt_broker: "tcp://localhost:1883"
 homescreen_mqtt_prefix: "zigbee2mqtt"

@@ -14,6 +14,7 @@ Installs and configures the homescreen smart home control panel on FreeBSD.
 | `homescreen_repo_url` | `https://sloppy-giuseppe37.github.io/homescreen` | URL of the pkg repository |
 | `homescreen_pubkey_file` | `homescreen.pub` | Signing key filename (in `files/`) |
 | `homescreen_autoupdate_enabled` | `true` | Enable automatic upgrades via cron (every 5 min) |
+| `homescreen_base_url` | (none) | Full URL of the app, e.g. `https://home.example.com:8000` |
 | `homescreen_mqtt_broker` | `tcp://localhost:1883` | MQTT broker address |
 | `homescreen_mqtt_prefix` | `zigbee2mqtt` | MQTT topic prefix for lights |
 | `homescreen_zones` | `[]` | Zone/room/light configuration (see below) |
