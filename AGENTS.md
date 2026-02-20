@@ -2,6 +2,8 @@
 
 Smart home control panel. Go backend + MQTT + SSE.
 
+> **⚠️ IMPORTANT: Always `git push` after finishing work if build succeeds and tests pass.**
+
 ## Architecture
 
 Stateless Go server on port 8000. MQTT broker is the source of truth.
@@ -164,6 +166,3 @@ To add a new device type (e.g. blinds):
 | mosquitto | 1883 (localhost only) | `systemctl status mosquitto` |
 | homescreen | 8000 | `systemctl status homescreen` |
 
-## Workflow
-
-Always `git push` after finishing work if all tests pass.
