@@ -70,7 +70,25 @@
       padding: 24px 0 20px;
     }
     header .icon-house { font-size: 26px; color: var(--accent); }
-    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; flex: 1; }
+    .help-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background 0.2s, color 0.2s;
+    }
+    .help-link:hover {
+      background: var(--accent);
+      color: white;
+    }
 
     /* ── Connection overlay ── */
     .connection-overlay {
@@ -180,6 +198,9 @@
 
     /* ── Column headers (hidden on mobile) ── */
     .column-header {
+      display: none;
+    }
+    .desktop-help {
       display: none;
     }
 
@@ -443,6 +464,13 @@
         grid-column: 2;
         grid-row: 1;
       }
+      /* Desktop help link */
+      .desktop-help {
+        display: flex;
+        position: fixed;
+        top: 24px;
+        right: 32px;
+      }
       /* Zone cards in rows 2+ */
       .card[data-zone-index="0"] { grid-row: 2; }
       .card[data-zone-index="1"] { grid-row: 3; }
@@ -463,12 +491,13 @@
   <header>
     <i class="icon-house"></i>
     <h1 id="page-title">Lights</h1>
-
+    <a href="/help/" class="help-link" title="Help">?</a>
   </header>
 
   <!-- Column headers (desktop only) -->
   <h2 class="column-header column-header-lights">Lights</h2>
   <h2 class="column-header column-header-heating">Heating</h2>
+  <a href="/help/" class="help-link desktop-help" title="Help">?</a>
 
   <!-- ═══ LIGHTS TAB ═══ -->
   <div id="lights" class="tab-panel active">

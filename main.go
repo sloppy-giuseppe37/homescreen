@@ -19,7 +19,7 @@ import (
 // Embed the HTML template into the binary so we don't need
 // to worry about file paths at runtime.
 //
-//go:embed templates/index.html
+//go:embed templates/index.html templates/help.html
 var templateFS embed.FS
 
 //go:embed static
@@ -100,12 +100,24 @@ func main() {
 	})
 
 	// Serve user documentation at /help
+	// The help page is a Go template that gets the BaseURL injected
+	helpTmpl, err := template.ParseFS(templateFS, "templates/help.html")
+	if err != nil {
+		log.Fatalf("Failed to parse help template: %v", err)
+	}
 	docsSub, err := fs.Sub(docsFS, "docs")
 	if err != nil {
 		log.Fatalf("Failed to create docs sub-fs: %v", err)
 	}
 	docsHandler := http.FileServer(http.FS(docsSub))
-	mux.Handle("GET /help/", http.StripPrefix("/help/", docsHandler))
+	// Serve static doc assets (images, README.md) at /help/*
+	mux.Handle("GET /help/images/", http.StripPrefix("/help/", docsHandler))
+	mux.Handle("GET /help/README.md", http.StripPrefix("/help/", docsHandler))
+	// Serve the help page template at /help/ with BaseURL injected
+	mux.HandleFunc("GET /help/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		helpTmpl.Execute(w, struct{ BaseURL string }{cfg.BaseURL})
+	})
 	mux.HandleFunc("GET /help", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/help/", http.StatusMovedPermanently)
 	})

@@ -22,7 +22,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | File | Responsibility |
 |---|---|
 | `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/`, `static/`, and `docs/` via `go:embed`. Serves `/static/` from embedded FS, `/sw.js` from root path (for service worker scope), and `/help/` for user documentation. |
-| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. |
+| `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. `Config.BaseURL` is the full public URL of the app, used in help docs. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
 | `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template. `PageData` includes config + `InitialState` (JSON snapshot of all device state, embedded in HTML so the page renders correctly on first paint without waiting for SSE). Routes: `GET /` (template), `GET /api/events` (SSE), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event. |
@@ -34,7 +34,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `static/lucide.css` | Vendored Lucide icon font CSS. |
 | `static/fonts/` | Vendored font files: Inter TTFs + Lucide woff2/woff/ttf. |
 | `static/icons/` | PWA icons: `icon-192.png`, `icon-512.png` (house icon on orange). |
-| `docs/` | User documentation served at `/help/`. Contains `README.md` (markdown), `index.html` (renders markdown client-side), and `images/` (screenshots). Embedded in binary via `go:embed`. |
+| `docs/` | User documentation served at `/help/`. Contains `README.md` (markdown) and `images/` (screenshots). The help page template (`templates/help.html`) renders the markdown client-side using vendored marked.js and github-markdown.css. `BaseURL` from config is injected for back-link and display. |
 | `homescreen.service` | systemd unit. Runs on port 8000, after mosquitto. |
 
 ## Config

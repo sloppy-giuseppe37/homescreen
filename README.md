@@ -42,6 +42,8 @@ mqtt:
   broker: "tcp://localhost:1883"
   topic_prefix: zigbee2mqtt        # zigbee2mqtt prefix for light topics
 
+base_url: "https://example.com:8000"  # full public URL (shown in help docs)
+
 zones:
   - name: Upstairs
     heating:

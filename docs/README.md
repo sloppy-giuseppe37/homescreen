@@ -4,7 +4,11 @@ Welcome! This guide explains how to use the Home Control app to manage the light
 
 ## Opening the App
 
-Open your phone's web browser and go to the Home Control website. You can also add it to your home screen for quick access — it works just like a regular app.
+Open your phone's web browser and go to:
+
+<a href="{{BASE_URL}}" class="app-url">{{BASE_URL}}</a>
+
+You can also add it to your home screen for quick access — it works just like a regular app.
 
 ## Overview
 

@@ -19,8 +19,9 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	MQTT  MQTTConfig   `yaml:"mqtt"`
-	Zones []ZoneConfig `yaml:"zones"`
+	MQTT    MQTTConfig   `yaml:"mqtt"`
+	Zones   []ZoneConfig `yaml:"zones"`
+	BaseURL string       `yaml:"base_url"` // Full URL of the app (e.g. "https://example.com:8000")
 }
 
 // MQTTConfig holds the broker connection details.
