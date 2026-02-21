@@ -34,7 +34,7 @@ The currently selected tab is highlighted in blue (for lights) or orange (for he
 
 ## Lights
 
-The Lights tab shows all the lights in the house, organized by area (like "Upstairs" and "Downstairs").
+The Lights tab shows all the lights in the house, organised by area (like "Upstairs" and "Downstairs").
 
 ### Turning Lights On and Off
 
