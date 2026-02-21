@@ -17,11 +17,20 @@
       background: #f6f8fa;
       -webkit-font-smoothing: antialiased;
     }
+    .back-header {
+      position: sticky;
+      top: 0;
+      background: #f6f8fa;
+      padding: 12px 0;
+      margin: -45px -45px 20px -45px;
+      padding: 12px 45px;
+      border-bottom: 1px solid #d0d7de;
+      z-index: 100;
+    }
     .back-link {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 20px;
       color: #0969da;
       text-decoration: none;
       font-size: 14px;
@@ -55,16 +64,22 @@
     }
     @media (max-width: 767px) {
       body { padding: 15px; }
+      .back-header {
+        margin: -15px -15px 15px -15px;
+        padding: 12px 15px;
+      }
       .markdown-body { padding: 20px; }
       .markdown-body img { max-width: 100%; }
     }
   </style>
 </head>
 <body>
-  <a href="{{.BaseURL}}" class="back-link">
+  <div class="back-header">
+    <a href="{{.BaseURL}}" class="back-link">
     <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M7.78 12.53a.75.75 0 01-1.06 0L2.47 8.28a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L4.81 7h7.44a.75.75 0 010 1.5H4.81l2.97 2.97a.75.75 0 010 1.06z"/></svg>
     Back to app
-  </a>
+    </a>
+  </div>
   <article class="markdown-body" id="content">Loading...</article>
   <script src="/static/marked.min.js"></script>
   <script>
