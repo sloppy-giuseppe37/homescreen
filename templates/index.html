@@ -409,6 +409,18 @@
       background: var(--border);
       box-shadow: none;
     }
+    /* Grey out heating zone controls when all units are off */
+    .card.zone-all-off input[type=range]::-webkit-slider-thumb {
+      background: var(--border);
+      box-shadow: none;
+    }
+    .card.zone-all-off input[type=range]::-moz-range-thumb {
+      background: var(--border);
+      box-shadow: none;
+    }
+    .card.zone-all-off .toggle input:checked + .slider {
+      background: var(--border);
+    }
     .brightness-value {
       font-size: 12px;
       font-weight: 600;
@@ -755,6 +767,14 @@ function updateHeatingUI(zoneName) {
   // If no rooms are on, fall back to all rooms.
   const allQuiet = consideredRooms.every(r => r.quiet);
 
+  // Grey out controls when all units are off
+  const card = document.querySelector(`.card[data-heating-zone="${zoneName}"]`);
+  const wasAllOff = card?.classList.contains('zone-all-off');
+  const isAllOff = onRooms.length === 0;
+  if (card) {
+    card.classList.toggle('zone-all-off', isAllOff);
+  }
+
   // Update temperature slider and display
   // (but only if the user isn't currently dragging the slider)
   const slider = document.querySelector(`input[data-temp-zone="${zoneName}"]`);
@@ -766,6 +786,9 @@ function updateHeatingUI(zoneName) {
     if (display) {
       display.innerHTML = rounded + '<span class="unit">°C</span>';
     }
+  } else if (slider && wasAllOff !== isAllOff) {
+    // Always update track color when zone on/off state changes
+    updateSliderTrack(slider);
   }
 
   // Update quiet toggle
@@ -825,8 +848,10 @@ function updateSliderTrack(slider) {
   const pct = ((slider.value - 16) / 9) * 100;
   const trackBg = getComputedStyle(document.documentElement)
     .getPropertyValue('--border').trim();
+  const isOff = slider.closest('.card')?.classList.contains('zone-all-off');
+  const fillColor = isOff ? trackBg : '#f59e0b';
   slider.style.background =
-    `linear-gradient(to right, #f59e0b ${pct}%, ${trackBg} ${pct}%)`;
+    `linear-gradient(to right, ${fillColor} ${pct}%, ${trackBg} ${pct}%)`;
 }
 
 // --- API Helpers ---
