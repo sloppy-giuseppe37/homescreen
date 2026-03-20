@@ -13,11 +13,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"text/template"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"text/template"
 )
 
 // App holds all the shared dependencies for our HTTP handlers.
@@ -26,6 +27,26 @@ type App struct {
 	MQTT        *MQTTClient
 	Broadcaster *SSEBroadcaster
 	Template    *template.Template
+
+	// coolingMode tracks whether we're in cooling mode (true) or heating mode (false).
+	// Persisted via a retained MQTT message on the ModeTopicName topic.
+	coolingMu   sync.RWMutex
+	coolingMode bool
+}
+
+// IsCoolingMode returns whether the app is in cooling mode.
+func (app *App) IsCoolingMode() bool {
+	app.coolingMu.RLock()
+	defer app.coolingMu.RUnlock()
+	return app.coolingMode
+}
+
+// SetCoolingMode sets the cooling mode flag. This only updates the in-memory
+// state — callers are responsible for publishing to MQTT if persistence is needed.
+func (app *App) SetCoolingMode(cool bool) {
+	app.coolingMu.Lock()
+	defer app.coolingMu.Unlock()
+	app.coolingMode = cool
 }
 
 // PageData is the data passed to the HTML template.
@@ -34,6 +55,7 @@ type App struct {
 type PageData struct {
 	*Config
 	InitialState string // JSON array of state events, safe to embed in <script>
+	CoolingMode  bool   // true if in cooling mode, used for initial CSS class + heading
 }
 
 // SetupRoutes registers all HTTP routes on the given ServeMux.
@@ -45,6 +67,8 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/heating/room/{zone}/{room}/power", app.handleRoomPower)
 	mux.HandleFunc("POST /api/light/{zone}/{name}/power", app.handleLightPower)
 	mux.HandleFunc("POST /api/light/{zone}/{name}/brightness", app.handleLightBrightness)
+	mux.HandleFunc("GET /api/mode", app.handleGetMode)
+	mux.HandleFunc("POST /api/mode", app.handleSetMode)
 }
 
 // ---------- Page handler ----------
@@ -63,6 +87,7 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	data := PageData{
 		Config:       app.Config,
 		InitialState: app.buildSnapshot(),
+		CoolingMode:  app.IsCoolingMode(),
 	}
 	if err := app.Template.Execute(w, data); err != nil {
 		log.Printf("template error: %v", err)
@@ -75,6 +100,8 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 // This is embedded in the HTML so the browser has state on first paint.
 func (app *App) buildSnapshot() string {
 	var events []json.RawMessage
+	// Mode event first so the frontend knows heating/cooling before processing rooms
+	events = append(events, json.RawMessage(app.buildModeEvent()))
 	for _, zone := range app.Config.Zones {
 		for _, room := range zone.Heating {
 			events = append(events, json.RawMessage(app.buildHeatingEvent(zone.Name, room)))
@@ -97,6 +124,8 @@ func (app *App) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	app.Broadcaster.ServeHTTP(w, r, func(ch chan string) {
+		// Send mode event first so client knows heating/cooling
+		ch <- app.buildModeEvent()
 		// Send current state for every heating room and every light
 		for _, zone := range app.Config.Zones {
 			for _, room := range zone.Heating {
@@ -122,7 +151,8 @@ func (app *App) buildHeatingEvent(zoneName string, room HeatingRoom) string {
 	quietVal, _ := app.MQTT.GetValue(quietTopic)
 
 	// Parse the raw MQTT strings into typed values
-	power := powerVal == "1"
+	// "1" = heating on, "2" = cooling on, "0" = off
+	power := powerVal == "1" || powerVal == "2"
 	temp := 20.0 // default
 	if t, err := strconv.ParseFloat(tempVal, 64); err == nil {
 		temp = t
@@ -240,6 +270,12 @@ func parseLightState(payload string) bool {
 // It looks up which room/light the topic belongs to by checking the config.
 // Returns "" if the topic doesn't match anything we know about.
 func (app *App) TopicToEvent(topic, value string) string {
+	// Handle the global heating/cooling mode topic
+	if topic == ModeTopicName {
+		app.SetCoolingMode(value == "cooling")
+		return app.buildModeEvent()
+	}
+
 	for _, zone := range app.Config.Zones {
 		// Check heating topics
 		for _, room := range zone.Heating {
@@ -420,9 +456,14 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// "1" = heating on, "2" = cooling on, "0" = off
 	val := "0"
 	if b, ok := req.Value.(bool); ok && b {
-		val = "1"
+		if app.IsCoolingMode() {
+			val = "2"
+		} else {
+			val = "1"
+		}
 	}
 
 	powerTopic, tempTopic, _ := room.HeatingTopics()
@@ -430,7 +471,7 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 	// When turning ON, publish the target temperature first so the unit
 	// starts at the correct setpoint rather than whatever stale value
 	// it had from before.
-	if val == "1" {
+	if val == "1" || val == "2" {
 		if cached, ok := app.MQTT.GetValue(tempTopic); ok && cached != "" {
 			if err := app.MQTT.Publish(tempTopic, cached); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -587,6 +628,93 @@ func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
 		topic := light.SetTopic(prefix, entity)
 		if err := app.MQTT.Publish(topic, payload); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
+		}
+	}
+
+	if len(errors) > 0 {
+		http.Error(w, strings.Join(errors, "; "), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------- Mode handlers ----------
+
+// buildModeEvent creates a JSON event string for the heating/cooling mode.
+func (app *App) buildModeEvent() string {
+	mode := "heating"
+	if app.IsCoolingMode() {
+		mode = "cooling"
+	}
+	event := map[string]any{
+		"type": "mode",
+		"mode": mode,
+	}
+	data, _ := json.Marshal(event)
+	return string(data)
+}
+
+// handleGetMode returns the current heating/cooling mode as JSON.
+func (app *App) handleGetMode(w http.ResponseWriter, r *http.Request) {
+	mode := "heating"
+	if app.IsCoolingMode() {
+		mode = "cooling"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"mode": mode})
+}
+
+// modeRequest is the JSON body for POST /api/mode.
+type modeRequest struct {
+	Mode string `json:"mode"`
+}
+
+// handleSetMode changes the heating/cooling mode.
+// If the mode is actually changing, it:
+//  1. Publishes the new mode as a retained MQTT message
+//  2. Powers off all heating units (the user can turn them back on)
+//
+// If the mode is already set to the requested value, it's a no-op (204).
+func (app *App) handleSetMode(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
+
+	var req modeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Mode != "heating" && req.Mode != "cooling" {
+		http.Error(w, "mode must be 'heating' or 'cooling'", http.StatusBadRequest)
+		return
+	}
+
+	// Check if the mode is actually changing
+	currentlyCooling := app.IsCoolingMode()
+	requestingCooling := req.Mode == "cooling"
+	if currentlyCooling == requestingCooling {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// 1. Publish the new mode as a retained message.
+	// The MQTT message arriving back via subscription will update app.coolingMode
+	// and trigger an SSE broadcast to all clients.
+	if err := app.MQTT.Publish(ModeTopicName, req.Mode); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Power off all heating units.
+	var errors []string
+	for _, zone := range app.Config.Zones {
+		for _, room := range zone.Heating {
+			powerTopic, _, _ := room.HeatingTopics()
+			if err := app.MQTT.Publish(powerTopic, "0"); err != nil {
+				errors = append(errors, fmt.Sprintf("%s/%s: %v", zone.Name, room.Name, err))
+			}
 		}
 	}
 

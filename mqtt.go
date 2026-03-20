@@ -145,10 +145,17 @@ func (m *MQTTClient) requestLightStates() {
 	}
 }
 
+// ModeTopicName is the MQTT topic where the heating/cooling mode is stored.
+// The value is "heating" or "cooling", published as a retained message.
+const ModeTopicName = "homescreen/config/heating_mode"
+
 // allTopics returns every MQTT topic string we need to subscribe to,
 // derived from the config (heating rooms + lights).
 func (m *MQTTClient) allTopics() []string {
 	var topics []string
+
+	// Global mode topic (heating vs cooling)
+	topics = append(topics, ModeTopicName)
 
 	for _, zone := range m.config.Zones {
 		// Each heating room has 3 topics (power, temperature, quiet)

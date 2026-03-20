@@ -25,7 +25,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. `Config.BaseURL` is the full public URL of the app, used in help docs. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
-| `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template. `PageData` includes config + `InitialState` (JSON snapshot of all device state, embedded in HTML so the page renders correctly on first paint without waiting for SSE). Routes: `GET /` (template), `GET /api/events` (SSE), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event. |
+| `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template+coolingMode. `PageData` includes config + `InitialState` + `CoolingMode`. Routes: `GET /` (template), `GET /api/events` (SSE), `GET/POST /api/mode` (heating/cooling), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event (including `homescreen/config/heating_mode`). |
 | `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `PageData` (config + initial state JSON). All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
 | `static/sw.js` | Service worker. Pre-caches offline page + static assets. Intercepts navigation requests — serves offline skeleton if server returns 5xx or network fails. |
 | `static/offline.html` | Standalone offline skeleton page with shimmer placeholder UI matching the real layout. Shows spinner overlay, auto-retries via page reload every 5s. |
@@ -45,14 +45,32 @@ Lives at `~/.config/homescreen/config.yaml` (searched first), `/usr/local/etc/ho
 
 Zones can be marked `secret: true` in config. Secret zones are hidden from the UI by default. Users can reveal them by quickly tapping the "Lights" or "Heating" header (column header on desktop, tab button on mobile) 13 times in rapid succession (<500ms between taps). This toggles a `secret` flag in localStorage, and the page adds/removes a `secret-mode` class on the body. Secret zones have a `secret-zone` CSS class that's hidden unless `body.secret-mode` is present.
 
+## Cooling mode
+
+The app supports a global heating/cooling mode toggle. The mode is persisted as a retained MQTT message on `homescreen/config/heating_mode` (values: `"heating"` or `"cooling"`). The server subscribes to this topic on startup and defaults to heating if no message exists.
+
+When cooling mode is active:
+- Turning a room ON sends `"2"` (cool) to the power topic instead of `"1"` (heat). `"0"` is always off.
+- `buildHeatingEvent` recognises both `"1"` and `"2"` as power-on.
+- The UI applies a `body.cooling-mode` CSS class that changes the heating accent colour from orange (`--warm`) to icy blue (`--cool: #38bdf8`).
+- The "Heating" heading/tab becomes "Cooling" with a snowflake icon instead of flame.
+
+When the mode **changes** (not just set to the same value), the server powers off all heating units by publishing `"0"` to every room's power topic.
+
+The mode switcher is accessed via a **2-second long-press** on the heating tab button, the desktop column header, or the mobile page title. This opens a modal overlay with Heating / Cooling / Cancel options styled like the tab bar.
+
 ## MQTT topic patterns
+
+### Global mode
+
+- `homescreen/config/heating_mode` — retained, values `"heating"` or `"cooling"`. Subscribed on startup. Changes trigger an SSE mode event.
 
 ### Light state request on startup
 
 zigbee2mqtt doesn't retain light state messages by default. After subscribing to all topics, the server publishes `{"state":""}` to `{topic_prefix}/{entity}/get` for every light entity. zigbee2mqtt responds by publishing the device's current state to the state topic, which populates the cache before any browser connects. Mains-powered devices respond immediately; battery/sleepy devices may not respond until their next check-in.
 
 Heating rooms use a `unit_id` to construct three topics:
-- `HomeKit/{unit_id}_Thermostat/Thermostat/TargetHeatingCoolingState` — power (0/1)
+- `HomeKit/{unit_id}_Thermostat/Thermostat/TargetHeatingCoolingState` — power (0=off, 1=heat, 2=cool)
 - `HomeKit/{unit_id}_Thermostat/Thermostat/TargetTemperature` — temp (e.g. "21.0")
 - `HomeKit/{unit_id}_IndoorQuiet/Switch/On` — quiet (0/1)
 
@@ -89,15 +107,18 @@ When turning a room ON via `handleRoomPower`, the backend publishes the cached t
 ```
 POST /api/heating/zone/{zone}/temperature  {"value": 21}      → publishes to all rooms
 POST /api/heating/zone/{zone}/quiet        {"value": true}    → publishes to all rooms
-POST /api/heating/room/{zone}/{room}/power {"value": true}    → single room
+POST /api/heating/room/{zone}/{room}/power {"value": true}    → single room (sends "1" or "2" based on mode)
 POST /api/light/{zone}/{name}/power        {"value": true}    → single light
 POST /api/light/{zone}/{name}/power        {"value": true, "brightness": 128} → with initial brightness
 POST /api/light/{zone}/{name}/brightness   {"value": 128}     → single light (0-254), only ON entities
+GET  /api/mode                             {"mode":"heating"} or {"mode":"cooling"}
+POST /api/mode                             {"mode":"cooling"} → changes mode, powers off all rooms on change
 GET  /api/events                           SSE stream
 GET  /help/                                User documentation (HTML)
 ```
 
 SSE sends JSON per line:
+- Mode: `data: {"type":"mode","mode":"heating"}` or `data: {"type":"mode","mode":"cooling"}`
 - Heating: `data: {"type":"heating","zone":"...","room":"...","power":true,"target_temp":21.0,"quiet":false}`
 - Light (no brightness): `data: {"type":"light","zone":"...","name":"...","on":true}`
 - Light (with brightness): `data: {"type":"light","zone":"...","name":"...","on":true,"brightness":200,"brightness_on":true}`
@@ -129,7 +150,7 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 
-49 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
+58 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
@@ -144,11 +165,13 @@ The binary embeds `templates/index.html` and the entire `static/` directory via 
 
 - **Use `text/template`, not `html/template`**: The HTML template contains complex JavaScript with template literals (backtick strings). Go's `html/template` contextual escaper corrupts the `<script>` content, silently truncating the output. `text/template` works correctly. This is safe because all template data comes from our own config, not user input.
 - **MQTT client ID conflicts**: The server generates a unique client ID using a nanosecond timestamp (`homescreen-{UnixNano}`), so multiple instances can run simultaneously. Tests also generate unique IDs. You may still see "connection lost: EOF" in test logs if clients disconnect — that's expected.
-- **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads.
+- **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads. The cooling mode e2e test also cleans up the `homescreen/config/heating_mode` topic.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).
 - **SSE heartbeats**: The server sends `: heartbeat\n\n` every 15 seconds. Without this, proxies (Caddy, exe.dev proxy) and mobile Safari kill idle TCP connections after ~30s.
 - **Service worker scope**: `sw.js` is served from `/sw.js` (not `/static/sw.js`) so it has root scope and can intercept navigation requests to `/`.
 - **5xx as offline**: The service worker treats HTTP 5xx responses (e.g. Caddy 502 when backend is down) the same as network failures — serves the offline skeleton page.
+- **Cooling mode CSS**: `body.cooling-mode` overrides `--warm` usages with `--cool: #38bdf8`. The `updateSliderTrack()` JS function also checks `state.coolingMode` to pick the right inline fill colour.
+- **Long-press gesture**: 2-second `pointerdown` timer on the heating tab/header/title opens the mode modal. Uses `touch-action: manipulation` to prevent browser delays. Does not interfere with the 13-tap secret mode gesture (different trigger mechanism).
 
 ## Adding new device types
 

@@ -274,9 +274,14 @@ func TestBuildSnapshot(t *testing.T) {
 		t.Fatalf("invalid snapshot JSON: %v", err)
 	}
 
-	// We have 3 heating rooms + 2 lights = 5 events
-	if len(events) != 5 {
-		t.Errorf("snapshot has %d events, want 5", len(events))
+	// We have 1 mode + 3 heating rooms + 2 lights = 6 events
+	if len(events) != 6 {
+		t.Errorf("snapshot has %d events, want 6", len(events))
+	}
+
+	// First event should be the mode event
+	if events[0]["type"] != "mode" {
+		t.Errorf("first event type = %v, want \"mode\"", events[0]["type"])
 	}
 
 	// Count types
@@ -1028,5 +1033,212 @@ func TestHandleIndex_200WhenMQTTConnected(t *testing.T) {
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+// ---------- Cooling mode tests ----------
+
+// TestGetMode_DefaultHeating verifies the default mode is "heating".
+func TestGetMode_DefaultHeating(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/api/mode", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]string
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["mode"] != "heating" {
+		t.Errorf("mode = %q, want \"heating\"", resp["mode"])
+	}
+}
+
+// TestSetMode_BadValue verifies invalid mode values are rejected.
+func TestSetMode_BadValue(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"mode": "turbo"}`
+	req := httptest.NewRequest("POST", "/api/mode", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// TestSetMode_NoChange verifies setting the same mode is a no-op 204.
+func TestSetMode_NoChange(t *testing.T) {
+	app := testApp(nil) // default is heating
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"mode": "heating"}`
+	req := httptest.NewRequest("POST", "/api/mode", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 204 {
+		t.Errorf("status = %d, want 204 (no change)", w.Code)
+	}
+}
+
+// TestSetMode_503WhenMQTTDisconnected verifies POST returns 503.
+func TestSetMode_503WhenMQTTDisconnected(t *testing.T) {
+	app := testAppDisconnected()
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	body := `{"mode": "cooling"}`
+	req := httptest.NewRequest("POST", "/api/mode", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// TestBuildHeatingEvent_CoolPower verifies that power value "2" is
+// recognised as powered on (cooling mode).
+func TestBuildHeatingEvent_CoolPower(t *testing.T) {
+	app := testApp(map[string]string{
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "2",
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "22.0",
+		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "0",
+	})
+
+	eventJSON := app.buildHeatingEvent("Upstairs", app.Config.Zones[0].Heating[0])
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["power"] != true {
+		t.Errorf("power = %v, want true (cooling mode power=2 should be on)", event["power"])
+	}
+	if event["target_temp"] != 22.0 {
+		t.Errorf("target_temp = %v, want 22.0", event["target_temp"])
+	}
+}
+
+// TestTopicToEvent_ModeTopic verifies that the mode MQTT topic
+// is converted to a mode SSE event and updates app state.
+func TestTopicToEvent_ModeTopic(t *testing.T) {
+	app := testApp(nil)
+
+	if app.IsCoolingMode() {
+		t.Fatal("expected heating mode initially")
+	}
+
+	eventJSON := app.TopicToEvent(ModeTopicName, "cooling")
+
+	var event map[string]any
+	json.Unmarshal([]byte(eventJSON), &event)
+
+	if event["type"] != "mode" {
+		t.Errorf("type = %v, want \"mode\"", event["type"])
+	}
+	if event["mode"] != "cooling" {
+		t.Errorf("mode = %v, want \"cooling\"", event["mode"])
+	}
+	if !app.IsCoolingMode() {
+		t.Error("expected app to be in cooling mode after TopicToEvent")
+	}
+
+	// Switch back to heating
+	app.TopicToEvent(ModeTopicName, "heating")
+	if app.IsCoolingMode() {
+		t.Error("expected app to be in heating mode after TopicToEvent")
+	}
+}
+
+// TestModeInSnapshot verifies that the snapshot includes a mode event.
+func TestModeInSnapshot(t *testing.T) {
+	app := testApp(nil)
+	app.SetCoolingMode(true)
+
+	snapshot := app.buildSnapshot()
+
+	var events []map[string]any
+	json.Unmarshal([]byte(snapshot), &events)
+
+	if len(events) == 0 {
+		t.Fatal("snapshot is empty")
+	}
+
+	// First event should be the mode event
+	if events[0]["type"] != "mode" {
+		t.Errorf("first event type = %v, want \"mode\"", events[0]["type"])
+	}
+	if events[0]["mode"] != "cooling" {
+		t.Errorf("mode = %v, want \"cooling\"", events[0]["mode"])
+	}
+}
+
+// TestHandleIndex_CoolingMode verifies the page renders with cooling-mode class.
+func TestHandleIndex_CoolingMode(t *testing.T) {
+	app := testApp(nil)
+	app.SetCoolingMode(true)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `class="cooling-mode"`) {
+		t.Error("expected body to have cooling-mode class")
+	}
+	if !strings.Contains(body, "icon-snowflake") {
+		t.Error("expected snowflake icon in cooling mode")
+	}
+	if !strings.Contains(body, ">Cooling</span>") {
+		t.Error("expected 'Cooling' tab label in cooling mode")
+	}
+}
+
+// TestHandleIndex_HeatingMode verifies the default page has no cooling-mode body class.
+func TestHandleIndex_HeatingMode(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	// The body tag should NOT have the cooling-mode class
+	// (note: CSS rules reference "cooling-mode" as selectors, so check the body tag specifically)
+	if strings.Contains(body, `class="cooling-mode"`) {
+		t.Error("expected no cooling-mode class on body in default heating mode")
+	}
+	if !strings.Contains(body, "icon-flame") {
+		t.Error("expected flame icon in heating mode")
+	}
+	if !strings.Contains(body, ">Heating</span>") {
+		t.Error("expected 'Heating' tab label in heating mode")
 	}
 }

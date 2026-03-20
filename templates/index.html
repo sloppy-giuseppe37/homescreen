@@ -33,6 +33,8 @@
       --off: #d1d5db;
       --warm: #f59e0b;
       --warm-glow: rgba(245,158,11,0.15);
+      --cool: #38bdf8;
+      --cool-glow: rgba(56,189,248,0.15);
       --radius: 16px;
       --radius-sm: 10px;
     }
@@ -494,10 +496,133 @@
     /* Secret zones: hidden by default, shown when body has .secret-mode */
     .secret-zone { display: none !important; }
     body.secret-mode .secret-zone { display: block !important; }
+
+    /* ── Cooling mode overrides ── */
+    body.cooling-mode .toggle.warm input:checked + .slider { background: var(--cool); }
+    body.cooling-mode input[type=range]::-webkit-slider-thumb {
+      background: var(--cool);
+      box-shadow: 0 2px 8px rgba(56,189,248,0.4);
+    }
+    body.cooling-mode input[type=range]::-moz-range-thumb {
+      background: var(--cool);
+      box-shadow: 0 2px 8px rgba(56,189,248,0.4);
+    }
+    /* Keep zone-all-off grey even in cooling mode */
+    body.cooling-mode .card.zone-all-off input[type=range]::-webkit-slider-thumb {
+      background: var(--border);
+      box-shadow: none;
+    }
+    body.cooling-mode .card.zone-all-off input[type=range]::-moz-range-thumb {
+      background: var(--border);
+      box-shadow: none;
+    }
+    body.cooling-mode .card.zone-all-off .toggle input:checked + .slider {
+      background: var(--border);
+    }
+    body.cooling-mode .tab-btn.active.heating-active {
+      background: rgba(56, 189, 248, 0.85);
+      box-shadow:
+        0 2px 12px rgba(56, 189, 248, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      body.cooling-mode .tab-btn.active.heating-active {
+        background: rgba(56, 189, 248, 0.75);
+        box-shadow:
+          0 2px 12px rgba(56, 189, 248, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    /* ── Mode selection modal ── */
+    .mode-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+    }
+    .mode-modal-overlay.visible { display: flex; }
+    .mode-modal {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+      min-width: 240px;
+    }
+    .mode-modal-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 24px;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .mode-modal-btn i { font-size: 20px; }
+    .mode-modal-btn.mode-heating-btn.selected {
+      background: rgba(244, 169, 66, 0.85);
+      color: #fff;
+      box-shadow:
+        0 2px 12px rgba(245, 158, 11, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    .mode-modal-btn.mode-cooling-btn.selected {
+      background: rgba(56, 189, 248, 0.85);
+      color: #fff;
+      box-shadow:
+        0 2px 12px rgba(56, 189, 248, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      .mode-modal {
+        background: var(--card);
+        box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+      }
+      .mode-modal-btn.mode-heating-btn.selected {
+        background: rgba(244, 169, 66, 0.75);
+        box-shadow:
+          0 2px 12px rgba(245, 158, 11, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+      .mode-modal-btn.mode-cooling-btn.selected {
+        background: rgba(56, 189, 248, 0.75);
+        box-shadow:
+          0 2px 12px rgba(56, 189, 248, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+    }
   </style>
 </head>
-<body>
+<body{{if .CoolingMode}} class="cooling-mode"{{end}}>
 <div class="connection-overlay" id="connection-overlay"><div class="spinner"></div></div>
+
+<!-- Mode selection modal -->
+<div class="mode-modal-overlay" id="mode-modal-overlay">
+  <div class="mode-modal">
+    <button class="mode-modal-btn mode-heating-btn" id="mode-btn-heating">
+      <i class="icon-flame"></i> Heating
+    </button>
+    <button class="mode-modal-btn mode-cooling-btn" id="mode-btn-cooling">
+      <i class="icon-snowflake"></i> Cooling
+    </button>
+    <button class="mode-modal-btn" id="mode-btn-cancel">
+      Cancel
+    </button>
+  </div>
+</div>
 
 <div class="shell">
   <header>
@@ -508,7 +633,7 @@
 
   <!-- Column headers (desktop only) -->
   <h2 class="column-header column-header-lights">Lights</h2>
-  <h2 class="column-header column-header-heating">Heating</h2>
+  <h2 class="column-header column-header-heating">{{if .CoolingMode}}Cooling{{else}}Heating{{end}}</h2>
   <a href="/help/" class="help-link desktop-help" title="Help">?</a>
 
   <!-- ═══ LIGHTS TAB ═══ -->
@@ -586,7 +711,7 @@
       <i class="icon-lightbulb"></i> Lights
     </button>
     <button class="tab-btn" data-tab="heating">
-      <i class="icon-flame"></i> Heating
+      <i class="{{if .CoolingMode}}icon-snowflake{{else}}icon-flame{{end}}"></i> <span class="heating-tab-label">{{if .CoolingMode}}Cooling{{else}}Heating{{end}}</span>
     </button>
   </div>
 </div>
@@ -652,7 +777,8 @@ document.querySelectorAll('.column-header, .tab-btn').forEach(el => {
 //                state.lights[zone][name]  = {on}
 const state = {
   heating: {},
-  lights: {}
+  lights: {},
+  coolingMode: {{if .CoolingMode}}true{{else}}false{{end}}
 };
 
 // --- Optimistic UI suppression ---
@@ -726,7 +852,11 @@ function connectSSE() {
   evtSource.onmessage = (e) => {
     const data = JSON.parse(e.data);
 
-    if (data.type === 'heating') {
+    if (data.type === 'mode') {
+      state.coolingMode = data.mode === 'cooling';
+      applyCoolingMode();
+    }
+    else if (data.type === 'heating') {
       // Store per-room heating state
       if (!state.heating[data.zone]) state.heating[data.zone] = {};
       state.heating[data.zone][data.room] = {
@@ -849,7 +979,7 @@ function updateSliderTrack(slider) {
   const trackBg = getComputedStyle(document.documentElement)
     .getPropertyValue('--border').trim();
   const isOff = slider.closest('.card')?.classList.contains('zone-all-off');
-  const fillColor = isOff ? trackBg : '#f59e0b';
+  const fillColor = isOff ? trackBg : (state.coolingMode ? '#38bdf8' : '#f59e0b');
   slider.style.background =
     `linear-gradient(to right, ${fillColor} ${pct}%, ${trackBg} ${pct}%)`;
 }
@@ -964,7 +1094,8 @@ function updatePageTitle(tabName) {
     document.getElementById('page-title').textContent = 'Home Control';
     document.title = 'Home Control';
   } else {
-    const title = tabName === 'heating' ? 'Heating' : 'Lights';
+    const hvacLabel = state.coolingMode ? 'Cooling' : 'Heating';
+    const title = tabName === 'heating' ? hvacLabel : 'Lights';
     document.getElementById('page-title').textContent = title;
     document.title = title;
   }
@@ -1076,7 +1207,10 @@ document.addEventListener('touchmove', e => {
 // This eliminates the "flash of default state" on page load.
 const initialState = {{.InitialState}};
 initialState.forEach(data => {
-  if (data.type === 'heating') {
+  if (data.type === 'mode') {
+    state.coolingMode = data.mode === 'cooling';
+    applyCoolingMode();
+  } else if (data.type === 'heating') {
     if (!state.heating[data.zone]) state.heating[data.zone] = {};
     state.heating[data.zone][data.room] = {
       power: data.power,
@@ -1091,6 +1225,109 @@ initialState.forEach(data => {
     updateLightUI(data.zone, data.name, data.on, data.brightness, data.brightness_on);
   }
 });
+
+// --- Cooling mode ---
+
+function applyCoolingMode() {
+  const cool = state.coolingMode;
+  document.body.classList.toggle('cooling-mode', cool);
+
+  // Update tab button icon + label
+  const heatingBtn = document.querySelector('.tab-btn[data-tab="heating"]');
+  if (heatingBtn) {
+    const icon = heatingBtn.querySelector('i');
+    const label = heatingBtn.querySelector('.heating-tab-label');
+    if (icon) {
+      icon.className = cool ? 'icon-snowflake' : 'icon-flame';
+    }
+    if (label) {
+      label.textContent = cool ? 'Cooling' : 'Heating';
+    }
+  }
+
+  // Update desktop column header
+  const colHeader = document.querySelector('.column-header-heating');
+  if (colHeader) colHeader.textContent = cool ? 'Cooling' : 'Heating';
+
+  // Update page title if on the heating tab
+  const activeTab = localStorage.getItem('activeTab') || 'lights';
+  updatePageTitle(activeTab);
+
+  // Re-color all temperature slider tracks
+  document.querySelectorAll('input[data-temp-zone]').forEach(updateSliderTrack);
+}
+
+// --- Mode selection modal ---
+
+const modeOverlay = document.getElementById('mode-modal-overlay');
+const modeBtnHeating = document.getElementById('mode-btn-heating');
+const modeBtnCooling = document.getElementById('mode-btn-cooling');
+const modeBtnCancel = document.getElementById('mode-btn-cancel');
+
+function showModeModal() {
+  // Highlight the current mode
+  modeBtnHeating.classList.toggle('selected', !state.coolingMode);
+  modeBtnCooling.classList.toggle('selected', state.coolingMode);
+  modeOverlay.classList.add('visible');
+}
+
+function hideModeModal() {
+  modeOverlay.classList.remove('visible');
+}
+
+function setMode(mode) {
+  hideModeModal();
+  fetch('/api/mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: mode })
+  }).catch(err => console.error('Mode change error:', err));
+}
+
+modeBtnHeating.addEventListener('click', () => setMode('heating'));
+modeBtnCooling.addEventListener('click', () => setMode('cooling'));
+modeBtnCancel.addEventListener('click', hideModeModal);
+modeOverlay.addEventListener('click', (e) => {
+  if (e.target === modeOverlay) hideModeModal();
+});
+
+// --- Long-press gesture for mode modal ---
+// 5-second hold on the heating tab button, column header, or page title
+// (when showing Heating/Cooling) opens the mode selection modal.
+
+const LONG_PRESS_MS = 5000;
+let _longPressTimer = null;
+
+function startLongPress(e) {
+  // Prevent text selection during long-press
+  e.preventDefault();
+  clearTimeout(_longPressTimer);
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    showModeModal();
+  }, LONG_PRESS_MS);
+}
+
+function cancelLongPress() {
+  clearTimeout(_longPressTimer);
+  _longPressTimer = null;
+}
+
+function attachLongPress(el) {
+  if (!el) return;
+  el.style.touchAction = 'manipulation';
+  el.addEventListener('pointerdown', startLongPress);
+  el.addEventListener('pointerup', cancelLongPress);
+  el.addEventListener('pointercancel', cancelLongPress);
+  el.addEventListener('pointerleave', cancelLongPress);
+}
+
+// Attach to the heating tab button
+attachLongPress(document.querySelector('.tab-btn[data-tab="heating"]'));
+// Attach to the desktop column header
+attachLongPress(document.querySelector('.column-header-heating'));
+// Attach to the page title (mobile — shows Heating/Cooling when on that tab)
+attachLongPress(document.getElementById('page-title'));
 
 // --- Start SSE ---
 // SSE takes over from here — any changes after page load arrive as events.

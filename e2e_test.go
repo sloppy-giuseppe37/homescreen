@@ -537,3 +537,121 @@ func TestE2E_SSEReconnectGetsSnapshot(t *testing.T) {
 	}
 	fmt.Sprintf("%v", event) // prevent unused warning
 }
+
+// TestE2E_CoolingMode tests the full cooling mode flow:
+// 1. Set cooling mode via API
+// 2. Verify mode event on SSE
+// 3. Verify all rooms powered off
+// 4. Turn a room on, verify MQTT gets "2" (cool)
+// 5. Switch back to heating, verify rooms powered off again
+func TestE2E_CoolingMode(t *testing.T) {
+	baseURL, app, cleanup := e2eSetup(t)
+	defer cleanup()
+	defer clearRetained(t, app)
+	// Also clean up the mode topic
+	defer func() {
+		app.MQTT.client.Publish(ModeTopicName, 1, true, "").Wait()
+	}()
+
+	// First, turn on a room in heating mode
+	resp, _ := postJSON(baseURL, "/api/heating/room/Upstairs/Bedroom/power", true)
+	if resp.StatusCode != 204 {
+		t.Fatalf("POST power status = %d", resp.StatusCode)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify it's ON with value "1" (heating)
+	powerTopic := "HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState"
+	val, ok := app.MQTT.GetValue(powerTopic)
+	if !ok || val != "1" {
+		t.Fatalf("expected power=1 (heating), got %q ok=%v", val, ok)
+	}
+
+	// Connect SSE client
+	events, closeSSE := sseReader(t, baseURL)
+	defer closeSSE()
+
+	// Drain the initial snapshot
+	time.Sleep(500 * time.Millisecond)
+	for len(events) > 0 {
+		<-events
+	}
+
+	// Switch to cooling mode
+	body, _ := json.Marshal(map[string]string{"mode": "cooling"})
+	resp, err := http.Post(baseURL+"/api/mode", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST mode: %v", err)
+	}
+	if resp.StatusCode != 204 {
+		t.Fatalf("POST mode status = %d, want 204", resp.StatusCode)
+	}
+
+	// Wait for mode event on SSE
+	event, found := waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+		return e["type"] == "mode" && e["mode"] == "cooling"
+	})
+	if !found {
+		t.Fatal("did not receive cooling mode event on SSE")
+	}
+	_ = event
+
+	// Wait for room to be powered off (mode change powers off all)
+	_, found = waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+		return e["type"] == "heating" && e["room"] == "Bedroom" && e["power"] == false
+	})
+	if !found {
+		t.Fatal("Bedroom was not powered off after mode change")
+	}
+
+	// Verify MQTT has the mode retained
+	modeVal, ok := app.MQTT.GetValue(ModeTopicName)
+	if !ok || modeVal != "cooling" {
+		t.Fatalf("expected mode topic = 'cooling', got %q ok=%v", modeVal, ok)
+	}
+
+	// Now turn the room on in cooling mode
+	resp, _ = postJSON(baseURL, "/api/heating/room/Upstairs/Bedroom/power", true)
+	if resp.StatusCode != 204 {
+		t.Fatalf("POST power status = %d", resp.StatusCode)
+	}
+
+	// Wait for the power event showing ON
+	_, found = waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+		return e["type"] == "heating" && e["room"] == "Bedroom" && e["power"] == true
+	})
+	if !found {
+		t.Fatal("Bedroom was not powered on")
+	}
+
+	// Verify MQTT has "2" (cooling) on the power topic
+	time.Sleep(200 * time.Millisecond)
+	val, ok = app.MQTT.GetValue(powerTopic)
+	if !ok || val != "2" {
+		t.Fatalf("expected power=2 (cooling), got %q ok=%v", val, ok)
+	}
+
+	// Switch back to heating — should power off all again
+	body, _ = json.Marshal(map[string]string{"mode": "heating"})
+	resp, err = http.Post(baseURL+"/api/mode", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST mode: %v", err)
+	}
+	if resp.StatusCode != 204 {
+		t.Fatalf("POST mode status = %d, want 204", resp.StatusCode)
+	}
+
+	_, found = waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+		return e["type"] == "mode" && e["mode"] == "heating"
+	})
+	if !found {
+		t.Fatal("did not receive heating mode event")
+	}
+
+	_, found = waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+		return e["type"] == "heating" && e["room"] == "Bedroom" && e["power"] == false
+	})
+	if !found {
+		t.Fatal("Bedroom was not powered off after switching back to heating")
+	}
+}
