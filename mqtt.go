@@ -210,6 +210,13 @@ func (m *MQTTClient) Publish(topic, value string) error {
 	return token.Error()
 }
 
+// PublishNonRetained publishes a message without the retained flag.
+func (m *MQTTClient) PublishNonRetained(topic, value string) error {
+	token := m.client.Publish(topic, 0, false, value)
+	token.Wait()
+	return token.Error()
+}
+
 // Disconnect cleanly shuts down the MQTT connection.
 func (m *MQTTClient) Disconnect() {
 	m.client.Disconnect(250) // wait up to 250ms for in-flight messages

@@ -454,6 +454,15 @@
       .tab-panel {
         display: contents !important;
       }
+      /* Scenes panel: full-width row below the grid, not display:contents */
+      .tab-panel.scenes-panel {
+        display: block !important;
+        grid-column: 1 / -1;
+      }
+      .column-header-scenes {
+        display: block;
+        grid-column: 1 / -1;
+      }
       /* Light cards go in column 1 */
       .light-card {
         grid-column: 1;
@@ -491,6 +500,137 @@
       .card[data-zone-index="2"] { grid-row: 4; }
       .card[data-zone-index="3"] { grid-row: 5; }
       .card[data-zone-index="4"] { grid-row: 6; }
+    }
+
+    /* ── Scenes ── */
+    :root {
+      --scene: #8b5cf6;
+      --scene-glow: rgba(139, 92, 246, 0.15);
+    }
+
+    .scenes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding-bottom: 8px;
+    }
+
+    .scene-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      padding: 20px 16px;
+      background: var(--card);
+      border: none;
+      border-radius: var(--radius);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--text);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      position: relative;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .scene-btn:active {
+      transform: scale(0.96);
+    }
+    .scene-btn .scene-icon {
+      font-size: 28px;
+      color: var(--scene);
+      transition: color 0.2s;
+    }
+    .scene-btn .scene-name {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .scene-btn .scene-desc {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-muted);
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Running state — pulsing glow */
+    .scene-btn.running {
+      pointer-events: none;
+    }
+    .scene-btn.running .scene-icon {
+      animation: scene-pulse 0.8s ease-in-out infinite alternate;
+    }
+    @keyframes scene-pulse {
+      from { opacity: 1; }
+      to { opacity: 0.4; }
+    }
+
+    /* Success flash — green check overlay */
+    .scene-btn .scene-check {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(34, 197, 94, 0.12);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .scene-btn .scene-check i {
+      font-size: 32px;
+      color: #22c55e;
+    }
+    .scene-btn.success .scene-check {
+      opacity: 1;
+    }
+
+    /* Error flash — red */
+    .scene-btn .scene-error {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(239, 68, 68, 0.12);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .scene-btn .scene-error i {
+      font-size: 32px;
+      color: #ef4444;
+    }
+    .scene-btn.error .scene-error {
+      opacity: 1;
+    }
+
+    /* Scenes tab active — purple */
+    .tab-btn.active.scenes-active {
+      background: rgba(139, 92, 246, 0.8);
+      box-shadow:
+        0 2px 12px rgba(139, 92, 246, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tab-btn.active.scenes-active {
+        background: rgba(139, 92, 246, 0.7);
+        box-shadow:
+          0 2px 12px rgba(139, 92, 246, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    /* Desktop: 4-column scenes grid */
+    @media (min-width: 1024px) {
+      .scenes-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
     }
 
     /* Secret zones: hidden by default, shown when body has .secret-mode */
@@ -702,6 +842,24 @@
     </div>
     {{end}}{{end}}
   </div>
+
+  {{if .HasScenes}}
+  <!-- ═══ SCENES TAB ═══ -->
+  <h2 class="column-header column-header-scenes">Scenes</h2>
+  <div id="scenes" class="tab-panel scenes-panel">
+    <div class="scenes-grid">
+      {{range .Scenes}}
+      <button class="scene-btn" data-scene="{{.Name}}">
+        <i class="icon-{{.Icon}} scene-icon"></i>
+        <span class="scene-name">{{.Name}}</span>
+        <span class="scene-desc">{{.Description}}</span>
+        <div class="scene-check"><i class="icon-check"></i></div>
+        <div class="scene-error"><i class="icon-x"></i></div>
+      </button>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
 </div>
 
 <!-- Tabs (sticky bottom bar) -->
@@ -713,6 +871,11 @@
     <button class="tab-btn" data-tab="heating">
       <i class="{{if .CoolingMode}}icon-snowflake{{else}}icon-flame{{end}}"></i> <span class="heating-tab-label">{{if .CoolingMode}}Cooling{{else}}Heating{{end}}</span>
     </button>
+    {{if .HasScenes}}
+    <button class="tab-btn" data-tab="scenes">
+      <i class="icon-sparkles"></i> Scenes
+    </button>
+    {{end}}
   </div>
 </div>
 
@@ -1095,19 +1258,21 @@ function updatePageTitle(tabName) {
     document.title = 'Home Control';
   } else {
     const hvacLabel = state.coolingMode ? 'Cooling' : 'Heating';
-    const title = tabName === 'heating' ? hvacLabel : 'Lights';
+    const titles = { lights: 'Lights', heating: hvacLabel, scenes: 'Scenes' };
+    const title = titles[tabName] || 'Lights';
     document.getElementById('page-title').textContent = title;
     document.title = title;
   }
 }
 
 function switchTab(tabName) {
-  tabBtns.forEach(b => b.classList.remove('active', 'heating-active'));
+  tabBtns.forEach(b => b.classList.remove('active', 'heating-active', 'scenes-active'));
   panels.forEach(p => p.classList.remove('active'));
   const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
   if (!btn) return;
   btn.classList.add('active');
   if (tabName === 'heating') btn.classList.add('heating-active');
+  if (tabName === 'scenes') btn.classList.add('scenes-active');
   document.getElementById(tabName).classList.add('active');
   localStorage.setItem('activeTab', tabName);
   updatePageTitle(tabName);
@@ -1328,6 +1493,33 @@ attachLongPress(document.querySelector('.tab-btn[data-tab="heating"]'));
 attachLongPress(document.querySelector('.column-header-heating'));
 // Attach to the page title (mobile — shows Heating/Cooling when on that tab)
 attachLongPress(document.getElementById('page-title'));
+
+// --- Scene buttons ---
+document.querySelectorAll('.scene-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (btn.classList.contains('running')) return;
+    btn.classList.add('running');
+    btn.classList.remove('success', 'error');
+    try {
+      const res = await fetch(`/api/scene/${encodeURIComponent(btn.dataset.scene)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok || res.status === 204) {
+        btn.classList.remove('running');
+        btn.classList.add('success');
+        setTimeout(() => btn.classList.remove('success'), 1200);
+      } else {
+        throw new Error(res.statusText);
+      }
+    } catch (err) {
+      console.error('Scene error:', err);
+      btn.classList.remove('running');
+      btn.classList.add('error');
+      setTimeout(() => btn.classList.remove('error'), 1500);
+    }
+  });
+});
 
 // --- Start SSE ---
 // SSE takes over from here — any changes after page load arrive as events.

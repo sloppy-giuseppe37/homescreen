@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 )
 
 // App holds all the shared dependencies for our HTTP handlers.
@@ -56,6 +57,7 @@ type PageData struct {
 	*Config
 	InitialState string // JSON array of state events, safe to embed in <script>
 	CoolingMode  bool   // true if in cooling mode, used for initial CSS class + heading
+	HasScenes    bool   // true if any scenes are configured
 }
 
 // SetupRoutes registers all HTTP routes on the given ServeMux.
@@ -69,6 +71,7 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/light/{zone}/{name}/brightness", app.handleLightBrightness)
 	mux.HandleFunc("GET /api/mode", app.handleGetMode)
 	mux.HandleFunc("POST /api/mode", app.handleSetMode)
+	mux.HandleFunc("POST /api/scene/{name}", app.handleScene)
 }
 
 // ---------- Page handler ----------
@@ -88,6 +91,7 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Config:       app.Config,
 		InitialState: app.buildSnapshot(),
 		CoolingMode:  app.IsCoolingMode(),
+		HasScenes:    len(app.Config.Scenes) > 0,
 	}
 	if err := app.Template.Execute(w, data); err != nil {
 		log.Printf("template error: %v", err)
@@ -715,6 +719,64 @@ func (app *App) handleSetMode(w http.ResponseWriter, r *http.Request) {
 			if err := app.MQTT.Publish(powerTopic, "0"); err != nil {
 				errors = append(errors, fmt.Sprintf("%s/%s: %v", zone.Name, room.Name, err))
 			}
+		}
+	}
+
+	if len(errors) > 0 {
+		http.Error(w, strings.Join(errors, "; "), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------- Scene handler ----------
+
+// timeAfter returns a channel that fires after ms milliseconds.
+// Extracted for testability.
+var timeAfter = func(ms int) <-chan struct{} {
+	ch := make(chan struct{})
+	go func() {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+		close(ch)
+	}()
+	return ch
+}
+
+func (app *App) handleScene(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	// Find the scene by name
+	var scene *SceneConfig
+	for i := range app.Config.Scenes {
+		if app.Config.Scenes[i].Name == name {
+			scene = &app.Config.Scenes[i]
+			break
+		}
+	}
+	if scene == nil {
+		http.Error(w, "scene not found", http.StatusNotFound)
+		return
+	}
+
+	// Execute actions sequentially with 200ms delay between each
+	var errors []string
+	for i, action := range scene.Actions {
+		if i > 0 {
+			select {
+			case <-r.Context().Done():
+				http.Error(w, "client disconnected", http.StatusRequestTimeout)
+				return
+			case <-timeAfter(200):
+			}
+		}
+		var err error
+		if action.Retained {
+			err = app.MQTT.Publish(action.Topic, action.Payload)
+		} else {
+			err = app.MQTT.PublishNonRetained(action.Topic, action.Payload)
+		}
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("action %d (%s): %v", i, action.Topic, err))
 		}
 	}
 

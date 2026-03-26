@@ -19,9 +19,10 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	MQTT    MQTTConfig   `yaml:"mqtt"`
-	Zones   []ZoneConfig `yaml:"zones"`
-	BaseURL string       `yaml:"base_url"` // Full URL of the app (e.g. "https://example.com:8000")
+	MQTT    MQTTConfig    `yaml:"mqtt"`
+	Zones   []ZoneConfig  `yaml:"zones"`
+	Scenes  []SceneConfig `yaml:"scenes"`
+	BaseURL string        `yaml:"base_url"` // Full URL of the app (e.g. "https://example.com:8000")
 }
 
 // MQTTConfig holds the broker connection details.
@@ -37,6 +38,21 @@ type ZoneConfig struct {
 	Secret  bool           `yaml:"secret"`  // if true, hidden unless user enables secret mode
 	Heating []HeatingRoom  `yaml:"heating"` // may be empty
 	Lights  []LightConfig  `yaml:"lights"`  // may be empty
+}
+
+// SceneConfig defines a preset scene that publishes a batch of MQTT messages.
+type SceneConfig struct {
+	Name        string        `yaml:"name"`        // display name, e.g. "Good Morning"
+	Description string        `yaml:"description"` // short description
+	Icon        string        `yaml:"icon"`        // lucide icon name without "icon-" prefix
+	Actions     []SceneAction `yaml:"actions"`     // MQTT messages to publish
+}
+
+// SceneAction is a single MQTT publish within a scene.
+type SceneAction struct {
+	Topic    string `yaml:"topic"`
+	Payload  string `yaml:"payload"`
+	Retained bool   `yaml:"retained"`
 }
 
 // HeatingRoom maps a room name to its Faikin unit ID.
