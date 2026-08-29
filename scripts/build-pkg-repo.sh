@@ -38,6 +38,16 @@ cat > "$PKGDIR/usr/local/etc/rc.d/homescreen" << 'RCEOF'
 # PROVIDE: homescreen
 # REQUIRE: DAEMON NETWORKING
 # KEYWORD: shutdown
+#
+# homescreen_enable (bool):         Set to YES to enable homescreen. Default: NO
+# homescreen_user (str):            User to run homescreen as. Default: root
+# homescreen_restart_delay (int):   Seconds to wait before restarting homescreen
+#                                   after it exits. Default: 5
+#
+# homescreen exits if the MQTT broker is unreachable at startup, which happens
+# whenever the broker's jail comes up after this one. daemon(8) supervises the
+# process and keeps restarting it, so the web app recovers on its own instead of
+# staying down until someone notices.
 
 . /etc/rc.subr
 
@@ -48,11 +58,19 @@ load_rc_config $name
 
 : ${homescreen_enable:="NO"}
 : ${homescreen_user:="root"}
+: ${homescreen_restart_delay:="5"}
 
+homescreen_program="/usr/local/bin/${name}"
+
+# The supervising daemon(8) is what rc.subr tracks: stopping the service has to
+# signal the supervisor, since signalling the child alone would only prompt
+# daemon to start it again.
 pidfile="/var/run/${name}.pid"
-procname="/usr/local/bin/${name}"
+child_pidfile="/var/run/${name}.child.pid"
+
 command="/usr/sbin/daemon"
-command_args="-f -S -p ${pidfile} -t ${name} -u ${homescreen_user} ${procname}"
+procname="/usr/sbin/daemon"
+command_args="-f -S -t ${name} -r -R ${homescreen_restart_delay} -P ${pidfile} -p ${child_pidfile} -u ${homescreen_user} ${homescreen_program}"
 
 run_rc_command "$1"
 RCEOF

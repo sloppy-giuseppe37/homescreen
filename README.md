@@ -145,6 +145,25 @@ sudo systemctl start homescreen
 
 Manage with `systemctl status homescreen`, `journalctl -u homescreen -f`.
 
+### As a FreeBSD service
+
+The pkg installs an rc.d script at `/usr/local/etc/rc.d/homescreen`:
+
+```sh
+sysrc homescreen_enable=YES
+service homescreen start
+```
+
+It runs under `daemon(8)` supervision, so if homescreen exits — most often because
+the MQTT broker's jail wasn't up yet — it is restarted automatically. Tune with:
+
+```sh
+sysrc homescreen_user=homescreen          # user to run as (default: root)
+sysrc homescreen_restart_delay=5          # seconds between restarts (default: 5)
+```
+
+Logs go to syslog under the `homescreen` tag.
+
 ## Testing
 
 ```bash
