@@ -51,6 +51,12 @@ func main() {
 	// broadcasts it to all connected browsers.
 	// The onConnectionLost callback disconnects all SSE clients
 	// so they trigger the offline UI flow.
+	//
+	// An unreachable broker is not a startup failure: the client keeps
+	// retrying in the background and the server serves regardless, returning
+	// 503s (which the frontend renders as its offline screen) until the broker
+	// is back. That is what makes a reboot where the broker's jail starts
+	// after ours a non-event.
 	var app *App // forward declaration so the callback can use it
 
 	mqttClient, err := NewMQTTClient(cfg, func(topic, value string) {
@@ -67,7 +73,9 @@ func main() {
 		broadcaster.DisconnectAll()
 	})
 	if err != nil {
-		log.Fatalf("Failed to connect to MQTT: %v", err)
+		// Only unusable MQTT configuration gets here — connection problems are
+		// handled by retrying, not by exiting.
+		log.Fatalf("Failed to set up MQTT client: %v", err)
 	}
 	defer mqttClient.Disconnect()
 

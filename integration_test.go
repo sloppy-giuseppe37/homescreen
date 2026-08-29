@@ -51,7 +51,13 @@ func integrationApp(t *testing.T) (*App, func()) {
 		}
 	}, nil)
 	if err != nil {
-		t.Fatalf("MQTT connect failed (is mosquitto running?): %v", err)
+		t.Fatalf("MQTT client setup failed: %v", err)
+	}
+	// Connecting is asynchronous and retries forever, so a broker that is down
+	// no longer surfaces as an error — wait for the connection instead.
+	if !mqttClient.WaitForConnection(5 * time.Second) {
+		mqttClient.Disconnect()
+		t.Fatalf("MQTT did not connect to %s (is mosquitto running?)", cfg.MQTT.Broker)
 	}
 
 	tmpl := template.Must(template.ParseFiles("templates/index.html"))

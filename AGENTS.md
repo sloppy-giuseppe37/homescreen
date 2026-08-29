@@ -15,15 +15,17 @@ Browser —POST→ Go server —publish→ Mosquitto broker
 
 The server subscribes to all relevant MQTT topics on startup, keeps an in-memory cache of latest values, and pushes changes to browsers via SSE. It does not persist any state to disk.
 
+The broker connection is treated as unreliable by design: it lives in a separate jail that may be down at startup or restart at any time. The server starts and serves without it, retries forever in the background, and re-subscribes and re-reads device state on every (re)connection. While the broker is away, handlers return 503 and the frontend/service worker show the offline screen; recovery needs no restart.
+
 The app is an installable PWA with offline support. Static assets (fonts, icons, CSS) are vendored and embedded in the binary. A service worker pre-caches the offline skeleton page and static assets.
 
 ## Key files
 
 | File | Responsibility |
 |---|---|
-| `main.go` | Entry point. Loads config, connects MQTT, starts HTTP server. Embeds `templates/`, `static/`, and `docs/` via `go:embed`. Serves `/static/` from embedded FS, `/sw.js` from root path (for service worker scope), and `/help/` for user documentation. |
+| `main.go` | Entry point. Loads config, starts the MQTT client (which never blocks startup on the broker), starts HTTP server. Embeds `templates/`, `static/`, and `docs/` via `go:embed`. Serves `/static/` from embedded FS, `/sw.js` from root path (for service worker scope), and `/help/` for user documentation. |
 | `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. `Config.BaseURL` is the full public URL of the app, used in help docs. |
-| `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. |
+| `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. Owns connection resilience: background connect with retry, auto-reconnect, keepalive, a watchdog goroutine that restarts the client if paho stops trying, re-subscription per connection (guarded by a connection generation counter), and bounded waits on every broker operation. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
 | `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template+coolingMode. `PageData` includes config + `InitialState` + `CoolingMode`. Routes: `GET /` (template), `GET /api/events` (SSE), `GET/POST /api/mode` (heating/cooling), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event (including `homescreen/config/heating_mode`). |
 | `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `PageData` (config + initial state JSON). All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
@@ -149,8 +151,9 @@ Test files:
 - `handlers_test.go` — HTTP handlers with fake MQTT (no broker needed)
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
+- `mqtt_test.go` — connection resilience: starting with no broker, broker appearing later, broker restart mid-session (starts its own throwaway mosquitto on a spare port)
 
-58 tests across five files. Integration/e2e tests clean up retained MQTT messages after themselves.
+88 tests across six files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
@@ -164,7 +167,8 @@ The binary embeds `templates/index.html` and the entire `static/` directory via 
 ## Important gotchas
 
 - **Use `text/template`, not `html/template`**: The HTML template contains complex JavaScript with template literals (backtick strings). Go's `html/template` contextual escaper corrupts the `<script>` content, silently truncating the output. `text/template` works correctly. This is safe because all template data comes from our own config, not user input.
-- **MQTT client ID conflicts**: The server generates a unique client ID using a nanosecond timestamp (`homescreen-{UnixNano}`), so multiple instances can run simultaneously. Tests also generate unique IDs. You may still see "connection lost: EOF" in test logs if clients disconnect — that's expected.
+- **MQTT client ID conflicts**: The client ID is `homescreen-{shorthostname}-{pid}`. The PID matters: a broker evicts whichever client already holds an ID when a new one claims it, so two instances sharing an ID (a leftover process, a dev copy beside the service) would kick each other off in a permanent loop. You may still see "connection lost: EOF" in test logs when clients disconnect — that's expected.
+- **paho's `IsConnected()` is not "connected"**: with `ConnectRetry`/`AutoReconnect` set it also reports true while connecting or reconnecting, and a publish in that state is *queued*, with a token that never completes — `token.Wait()` would block a handler forever. `MQTTClient.IsConnected()` therefore tracks the real state (`connected` flag, set from the connect/lost callbacks and reconciled by the watchdog against `IsConnectionOpen()`), publishes fail fast rather than queue, and every token wait uses `WaitTimeout`.
 - **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads. The cooling mode e2e test also cleans up the `homescreen/config/heating_mode` topic.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).
 - **SSE heartbeats**: The server sends `: heartbeat\n\n` every 15 seconds. Without this, proxies (Caddy, exe.dev proxy) and mobile Safari kill idle TCP connections after ~30s.
