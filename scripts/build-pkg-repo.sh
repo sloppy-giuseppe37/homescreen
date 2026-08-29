@@ -40,7 +40,7 @@ cat > "$PKGDIR/usr/local/etc/rc.d/homescreen" << 'RCEOF'
 # KEYWORD: shutdown
 #
 # homescreen_enable (bool):         Set to YES to enable homescreen. Default: NO
-# homescreen_user (str):            User to run homescreen as. Default: root
+# homescreen_runas (str):           User to run homescreen as. Default: root
 # homescreen_restart_delay (int):   Seconds to wait before restarting homescreen
 #                                   after it exits. Default: 5
 #
@@ -57,11 +57,21 @@ rcvar="homescreen_enable"
 load_rc_config $name
 
 : ${homescreen_enable:="NO"}
-: ${homescreen_user:="root"}
+: ${homescreen_runas:="root"}
 : ${homescreen_restart_delay:="5"}
 
-homescreen_program="/usr/local/bin/${name}"
-
+# Careful with new variable names here. rc.subr claims several ${name}_* names
+# for itself, and quietly changes what runs when it finds one:
+#
+#   ${name}_program  replaces $command outright -- naming the binary that way
+#                    runs it directly, with daemon(8)'s arguments handed to it
+#                    as its own, in the foreground and with no supervision.
+#   ${name}_user     makes rc.subr wrap the command in su(1), which fails for
+#                    the nologin shells service accounts normally have, and
+#                    would leave the supervisor unable to write its pidfile
+#                    under /var/run. daemon(8) drops privileges for us instead,
+#                    hence homescreen_runas above.
+#
 # The supervising daemon(8) is what rc.subr tracks: stopping the service has to
 # signal the supervisor, since signalling the child alone would only prompt
 # daemon to start it again.
@@ -70,7 +80,7 @@ child_pidfile="/var/run/${name}.child.pid"
 
 command="/usr/sbin/daemon"
 procname="/usr/sbin/daemon"
-command_args="-f -S -t ${name} -r -R ${homescreen_restart_delay} -P ${pidfile} -p ${child_pidfile} -u ${homescreen_user} ${homescreen_program}"
+command_args="-f -S -t ${name} -r -R ${homescreen_restart_delay} -P ${pidfile} -p ${child_pidfile} -u ${homescreen_runas} /usr/local/bin/${name}"
 
 run_rc_command "$1"
 RCEOF

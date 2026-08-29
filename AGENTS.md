@@ -153,9 +153,10 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 - `status_test.go` — /status and /status.json, including with the broker down
+- `rcd_test.go` — the embedded FreeBSD rc.d script (supervision flags, rc.subr name collisions)
 - `mqtt_test.go` — connection resilience: starting with no broker, broker appearing later, broker restart mid-session (starts its own throwaway mosquitto on a spare port)
 
-95 tests across seven files. Integration/e2e tests clean up retained MQTT messages after themselves.
+97 tests across eight files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
@@ -175,6 +176,7 @@ The binary embeds `templates/index.html` and the entire `static/` directory via 
 
 - **Use `text/template`, not `html/template`**: The HTML template contains complex JavaScript with template literals (backtick strings). Go's `html/template` contextual escaper corrupts the `<script>` content, silently truncating the output. `text/template` works correctly. This is safe because all template data comes from our own config, not user input.
 - **MQTT client ID conflicts**: The client ID is `homescreen-{shorthostname}-{pid}`. The PID matters: a broker evicts whichever client already holds an ID when a new one claims it, so two instances sharing an ID (a leftover process, a dev copy beside the service) would kick each other off in a permanent loop. You may still see "connection lost: EOF" in test logs when clients disconnect — that's expected.
+- **rc.subr claims `${name}_*` variable names**: the FreeBSD rc.d script lives in `scripts/build-pkg-repo.sh`. Defining `homescreen_program` made rc.subr replace `$command` with it, so `service homescreen start` ran the app directly — foreground, daemon(8)'s flags passed to the app as its own arguments, no supervision. `homescreen_user` similarly makes rc.subr wrap everything in `su(1)`. `rcd_test.go` guards against both; add new knobs under names rc.subr does not read.
 - **paho's `IsConnected()` is not "connected"**: with `ConnectRetry`/`AutoReconnect` set it also reports true while connecting or reconnecting, and a publish in that state is *queued*, with a token that never completes — `token.Wait()` would block a handler forever. `MQTTClient.IsConnected()` therefore tracks the real state (`connected` flag, set from the connect/lost callbacks and reconciled by the watchdog against `IsConnectionOpen()`), publishes fail fast rather than queue, and every token wait uses `WaitTimeout`.
 - **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads. The cooling mode e2e test also cleans up the `homescreen/config/heating_mode` topic.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).

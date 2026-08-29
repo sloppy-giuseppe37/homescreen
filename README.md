@@ -158,9 +158,14 @@ It runs under `daemon(8)` supervision, so if homescreen exits — most often bec
 the MQTT broker's jail wasn't up yet — it is restarted automatically. Tune with:
 
 ```sh
-sysrc homescreen_user=homescreen          # user to run as (default: root)
+sysrc homescreen_runas=homescreen         # user to run as (default: root)
 sysrc homescreen_restart_delay=5          # seconds between restarts (default: 5)
 ```
+
+The user knob is `homescreen_runas`, not `homescreen_user`: rc.subr treats
+`${name}_user` as an instruction to wrap the whole service in `su(1)`, which
+would run the supervisor as that user too. `daemon(8)` drops privileges for the
+program instead.
 
 Logs go to syslog under the `homescreen` tag.
 
