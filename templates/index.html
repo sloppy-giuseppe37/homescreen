@@ -638,21 +638,24 @@
     body.secret-mode .secret-zone { display: block !important; }
 
     /* ── Cooling mode overrides ── */
+    /* Scoped to #heating: cooling is an HVAC mode, so it must not reach the
+       light brightness sliders in #lights, which stay accent blue. Without the
+       scope these rules outrank .brightness-slider-row on specificity. */
     body.cooling-mode .toggle.warm input:checked + .slider { background: var(--cool); }
-    body.cooling-mode input[type=range]::-webkit-slider-thumb {
+    body.cooling-mode #heating input[type=range]::-webkit-slider-thumb {
       background: var(--cool);
       box-shadow: 0 2px 8px rgba(56,189,248,0.4);
     }
-    body.cooling-mode input[type=range]::-moz-range-thumb {
+    body.cooling-mode #heating input[type=range]::-moz-range-thumb {
       background: var(--cool);
       box-shadow: 0 2px 8px rgba(56,189,248,0.4);
     }
     /* Keep zone-all-off grey even in cooling mode */
-    body.cooling-mode .card.zone-all-off input[type=range]::-webkit-slider-thumb {
+    body.cooling-mode #heating .card.zone-all-off input[type=range]::-webkit-slider-thumb {
       background: var(--border);
       box-shadow: none;
     }
-    body.cooling-mode .card.zone-all-off input[type=range]::-moz-range-thumb {
+    body.cooling-mode #heating .card.zone-all-off input[type=range]::-moz-range-thumb {
       background: var(--border);
       box-shadow: none;
     }
