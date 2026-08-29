@@ -12,8 +12,12 @@ BINARY  := homescreen
 MODULE  := homescreen
 DIST    := dist
 
-# Linker flags: strip debug info and symbol table for smaller binaries
-LDFLAGS := -s -w
+# Version reported by /status. Taken from git, overridable: make VERSION=1.2.3
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
+# Linker flags: strip debug info and symbol table for smaller binaries,
+# and bake in the version
+LDFLAGS := -s -w -X main.Version=$(VERSION)
 
 # All target platforms: OS/ARCH pairs
 PLATFORMS := \

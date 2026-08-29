@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<!-- Refreshes on its own so the page can be left open while waiting for
+     something (usually the broker) to come back. -->
+<meta http-equiv="refresh" content="15">
+<title>homescreen status</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f9fafb; --card: #fff; --text: #111827; --muted: #6b7280;
+    --border: #e5e7eb; --ok: #16a34a; --bad: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111827; --card: #1f2937; --text: #f3f4f6; --muted: #9ca3af;
+      --border: #374151; --ok: #22c55e; --bad: #ef4444;
+    }
+  }
+  body {
+    margin: 0; padding: 24px 16px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 20px 0 6px; font-weight: 600;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  }
+  td { padding: 7px 12px; border-top: 1px solid var(--border); }
+  tr:first-child td { border-top: none; }
+  td:first-child { color: var(--muted); width: 45%; }
+  td:last-child { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .up { background: var(--ok); } .down { background: var(--bad); }
+  .state-up { color: var(--ok); } .state-down { color: var(--bad); }
+  footer { margin-top: 20px; color: var(--muted); font-size: 12px; text-align: center; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>homescreen</h1>
+  <div class="sub">{{.Host}} · up {{.Uptime}} · {{.Version}}</div>
+
+  <h2>MQTT</h2>
+  <table>
+    <tr><td>Connection</td><td>
+      {{if .MQTT.Connected}}<span class="dot up"></span><span class="state-up">connected</span>
+      {{else}}<span class="dot down"></span><span class="state-down">disconnected</span>{{end}}
+    </td></tr>
+    <tr><td>Broker</td><td>{{.MQTT.Broker}}</td></tr>
+    <tr><td>Client ID</td><td>{{.MQTT.ClientID}}</td></tr>
+    {{if .MQTT.Connected}}<tr><td>Connected for</td><td>{{.ConnectedFor}}</td></tr>{{end}}
+    <tr><td>Last disconnect</td><td>{{.LastLostText}}</td></tr>
+    <tr><td>Connects / drops</td><td>{{.MQTT.Connects}} / {{.MQTT.Disconnects}}</td></tr>
+    <tr><td>Subscribed topics</td><td>{{.MQTT.Subscriptions}}</td></tr>
+    <tr><td>Cached topics</td><td>{{.MQTT.CachedTopics}}</td></tr>
+    <tr><td>Messages received</td><td>{{.MQTT.Messages}}</td></tr>
+    <tr><td>Last message</td><td>{{.LastMessageText}}</td></tr>
+  </table>
+
+  <h2>App</h2>
+  <table>
+    <tr><td>Mode</td><td>{{.Mode}}</td></tr>
+    <tr><td>Browsers connected</td><td>{{.SSEClients}}</td></tr>
+    <tr><td>Zones</td><td>{{.Zones}}</td></tr>
+    <tr><td>Heating rooms / lights</td><td>{{.Rooms}} / {{.Lights}}</td></tr>
+    <tr><td>Scenes</td><td>{{.Scenes}}</td></tr>
+  </table>
+
+  <h2>Process</h2>
+  <table>
+    <tr><td>Version</td><td>{{.Version}}</td></tr>
+    <tr><td>Go</td><td>{{.Go}}</td></tr>
+    <tr><td>PID</td><td>{{.PID}}</td></tr>
+    <tr><td>Started</td><td>{{.StartedAtText}}</td></tr>
+    <tr><td>Goroutines</td><td>{{.Goroutines}}</td></tr>
+    <tr><td>Heap</td><td>{{printf "%.1f" .HeapMB}} MB</td></tr>
+  </table>
+
+  <footer><a href="/">← app</a> · <a href="/status.json">status.json</a> · refreshes every 15s</footer>
+</main>
+</body>
+</html>

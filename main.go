@@ -19,7 +19,7 @@ import (
 // Embed the HTML template into the binary so we don't need
 // to worry about file paths at runtime.
 //
-//go:embed templates/index.html templates/help.html
+//go:embed templates/index.html templates/help.html templates/status.html
 var templateFS embed.FS
 
 //go:embed static
@@ -86,6 +86,10 @@ func main() {
 		Broadcaster: broadcaster,
 		Template:    tmpl,
 	}
+
+	// Pick up state that arrived while the App was still being built: the
+	// broker's retained mode message lands as soon as we subscribe.
+	app.SyncModeFromMQTT()
 
 	// --- Set up HTTP routes ---
 	mux := http.NewServeMux()

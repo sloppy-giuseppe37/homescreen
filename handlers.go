@@ -5,6 +5,8 @@ package main
 // Routes:
 //   GET  /              → serves the HTML page (Go template, rendered from config)
 //   GET  /api/events    → SSE stream of state updates
+//   GET  /status        → health page (works with the broker down)
+//   GET  /status.json   → the same, for scripts
 //   POST /api/heating/zone/{zone}/temperature  → set target temp for all rooms in zone
 //   POST /api/heating/zone/{zone}/quiet        → set quiet mode for all rooms in zone
 //   POST /api/heating/room/{zone}/{room}/power → toggle one room on/off
@@ -72,6 +74,11 @@ func (app *App) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mode", app.handleGetMode)
 	mux.HandleFunc("POST /api/mode", app.handleSetMode)
 	mux.HandleFunc("POST /api/scene/{name}", app.handleScene)
+
+	// Diagnostics. Deliberately outside the MQTT guard: these have to answer
+	// when the broker is down, which is when someone comes looking.
+	mux.HandleFunc("GET /status", app.handleStatus)
+	mux.HandleFunc("GET /status.json", app.handleStatusJSON)
 }
 
 // ---------- Page handler ----------
@@ -268,6 +275,20 @@ func parseLightPayload(payload string) lightEntityState {
 // parseLightState is a convenience wrapper that returns just the on/off bool.
 func parseLightState(payload string) bool {
 	return parseLightPayload(payload).On
+}
+
+// SyncModeFromMQTT seeds the heating/cooling flag from the broker's retained
+// mode message.
+//
+// Messages that arrive before main() has built the App reach the cache but not
+// this flag, because the onChange callback has no App to call into yet — and
+// retained messages arrive the instant we subscribe, which is before the App
+// exists. Without this the app would come up in heating mode after every
+// restart, whatever the system was actually set to.
+func (app *App) SyncModeFromMQTT() {
+	if value, ok := app.MQTT.GetValue(ModeTopicName); ok {
+		app.SetCoolingMode(strings.TrimSpace(value) == "cooling")
+	}
 }
 
 // TopicToEvent converts an MQTT topic + value into a JSON SSE event string.

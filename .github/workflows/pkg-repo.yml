@@ -24,10 +24,6 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Build for FreeBSD
-        run: |
-          GOOS=freebsd GOARCH=amd64 go build -o homescreen -trimpath -ldflags='-s -w' .
-
       - name: Determine version
         id: version
         run: |
@@ -35,6 +31,13 @@ jobs:
           VERSION="0.$(date -u +%Y%m%d%H%M%S).g${GITHUB_SHA::7}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
+
+      # Runs after the version is known so the same string the pkg carries is
+      # baked into the binary and shown on /status.
+      - name: Build for FreeBSD
+        run: |
+          GOOS=freebsd GOARCH=amd64 go build -o homescreen -trimpath \
+            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" .
 
       - name: Write signing key
         run: echo "${{ secrets.PKG_SIGNING_KEY }}" > /tmp/repo.key

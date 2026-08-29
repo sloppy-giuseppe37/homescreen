@@ -70,6 +70,13 @@ func (b *SSEBroadcaster) DisconnectAll() {
 	}
 }
 
+// ClientCount returns how many browsers are currently connected.
+func (b *SSEBroadcaster) ClientCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.clients)
+}
+
 // Broadcast sends a JSON string to all connected clients.
 // If a client's buffer is full (it's too slow), we skip it
 // rather than blocking the whole system.

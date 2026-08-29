@@ -1242,3 +1242,26 @@ func TestHandleIndex_HeatingMode(t *testing.T) {
 		t.Error("expected 'Heating' tab label in heating mode")
 	}
 }
+
+// TestSyncModeFromMQTT covers startup ordering: the broker's retained mode
+// message reaches the MQTT cache before the App exists to be told about it, so
+// the App has to read it back or it comes up in the wrong mode after a restart.
+func TestSyncModeFromMQTT(t *testing.T) {
+	app := testApp(map[string]string{ModeTopicName: "cooling"})
+	if app.IsCoolingMode() {
+		t.Fatal("app should start in heating mode")
+	}
+
+	app.SyncModeFromMQTT()
+
+	if !app.IsCoolingMode() {
+		t.Error("expected cooling mode after syncing from the retained message")
+	}
+
+	// No retained message at all leaves the default alone.
+	fresh := testApp(nil)
+	fresh.SyncModeFromMQTT()
+	if fresh.IsCoolingMode() {
+		t.Error("expected heating mode when the broker has no mode message")
+	}
+}

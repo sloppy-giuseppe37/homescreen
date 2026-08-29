@@ -82,6 +82,70 @@ type MQTTClient struct {
 	// stop shuts down the connection watchdog. Closed once, by Disconnect.
 	stop     chan struct{}
 	stopOnce sync.Once
+
+	// Connection history, for the /status page. None of it is load-bearing:
+	// it exists so someone can tell at a glance whether the link to the broker
+	// has been solid or flapping.
+	statsMu       sync.RWMutex
+	clientID      string
+	connectedAt   time.Time // when the current connection came up
+	lastLostAt    time.Time // when a connection last dropped
+	connects      int
+	disconnects   int
+	subscriptions int   // topics subscribed on the current connection
+	messages      int64 // messages received since startup
+	lastMessageAt time.Time
+}
+
+// MQTTStats is a snapshot of the broker connection for the status page.
+// The times are pointers so that "hasn't happened yet" is a null rather than
+// year 1 — omitempty does nothing for a time.Time.
+type MQTTStats struct {
+	Broker        string     `json:"broker"`
+	ClientID      string     `json:"client_id"`
+	Connected     bool       `json:"connected"`
+	ConnectedAt   *time.Time `json:"connected_at"`
+	LastLostAt    *time.Time `json:"last_lost_at"`
+	Connects      int        `json:"connects"`
+	Disconnects   int        `json:"disconnects"`
+	Subscriptions int        `json:"subscriptions"`
+	Messages      int64      `json:"messages"`
+	LastMessageAt *time.Time `json:"last_message_at"`
+	CachedTopics  int        `json:"cached_topics"`
+}
+
+// optTime returns nil for a zero time, so callers can tell "never" from a date.
+func optTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// Stats returns a snapshot of the connection state and history. Safe to call
+// on a client that never connected, which is the case worth reporting.
+func (m *MQTTClient) Stats() MQTTStats {
+	m.statsMu.RLock()
+	s := MQTTStats{
+		ClientID:      m.clientID,
+		ConnectedAt:   optTime(m.connectedAt),
+		LastLostAt:    optTime(m.lastLostAt),
+		Connects:      m.connects,
+		Disconnects:   m.disconnects,
+		Subscriptions: m.subscriptions,
+		Messages:      m.messages,
+		LastMessageAt: optTime(m.lastMessageAt),
+	}
+	m.statsMu.RUnlock()
+
+	s.Connected = m.IsConnected()
+	if m.config != nil {
+		s.Broker = m.config.MQTT.Broker
+	}
+	m.cacheMu.RLock()
+	s.CachedTopics = len(m.cache)
+	m.cacheMu.RUnlock()
+	return s
 }
 
 // NewMQTTClient creates a new client and starts connecting to the broker.
@@ -114,7 +178,8 @@ func NewMQTTClient(cfg *Config, onChange func(topic, value string), onConnection
 	// no amount of reconnecting can escape.
 	hostname, _ := os.Hostname()
 	shortHost := strings.Split(hostname, ".")[0]
-	opts.SetClientID(fmt.Sprintf("homescreen-%s-%d", shortHost, os.Getpid()))
+	m.clientID = fmt.Sprintf("homescreen-%s-%d", shortHost, os.Getpid())
+	opts.SetClientID(m.clientID)
 
 	// AutoReconnect recovers from a connection that drops; ConnectRetry keeps
 	// the *first* connection attempt going when the broker isn't up yet.
@@ -218,7 +283,17 @@ func (m *MQTTClient) setConnected(connected bool) {
 	m.connected = connected
 	m.connectedMu.Unlock()
 
-	if was && !connected && m.onConnectionLost != nil {
+	if !was || connected {
+		return
+	}
+
+	m.statsMu.Lock()
+	m.lastLostAt = time.Now()
+	m.disconnects++
+	m.connectedAt = time.Time{}
+	m.statsMu.Unlock()
+
+	if m.onConnectionLost != nil {
 		m.onConnectionLost()
 	}
 }
@@ -281,6 +356,12 @@ func (m *MQTTClient) subscribeAll(gen uint64) {
 		log.Printf("MQTT: subscribed to %d topics", len(filters))
 		break
 	}
+
+	m.statsMu.Lock()
+	m.subscriptions = len(filters)
+	m.connectedAt = time.Now()
+	m.connects++
+	m.statsMu.Unlock()
 
 	// Only now can we answer requests with real state.
 	m.setConnected(true)
@@ -365,6 +446,11 @@ func (m *MQTTClient) handleMessage(topic, value string) {
 	m.cacheMu.Lock()
 	m.cache[topic] = value
 	m.cacheMu.Unlock()
+
+	m.statsMu.Lock()
+	m.messages++
+	m.lastMessageAt = time.Now()
+	m.statsMu.Unlock()
 
 	// Notify listeners (this sends SSE events to all connected browsers)
 	if m.onChange != nil {

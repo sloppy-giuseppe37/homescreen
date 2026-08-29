@@ -164,6 +164,20 @@ sysrc homescreen_restart_delay=5          # seconds between restarts (default: 5
 
 Logs go to syslog under the `homescreen` tag.
 
+## Status page
+
+`/status` is a minimal, no-JavaScript health page: MQTT connection state and
+history (connects, drops, last message), the running binary's version, uptime,
+memory, connected browsers, and config counts. `/status.json` serves the same
+data for scripts:
+
+```sh
+curl -s http://homescreen:8000/status.json | jq '.version, .mqtt.connected'
+```
+
+Both answer while the broker is down — that is what they are for, so they sit
+outside the check that makes the rest of the app return 503.
+
 ## Testing
 
 ```bash

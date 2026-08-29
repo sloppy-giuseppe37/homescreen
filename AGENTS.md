@@ -27,6 +27,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `config.go` | `Config`, `ZoneConfig`, `HeatingRoom`, `LightConfig` types. Loads config from `~/.config/homescreen/config.yaml`, `/usr/local/etc/homescreen.yaml`, or `/etc/homescreen.yaml` (first found). `HeatingTopics()` builds the 3 MQTT topics for a heating unit. `LightConfig` has `Name` and `Entities []string` (entity names under zigbee2mqtt). `MQTTConfig` has `TopicPrefix string` for the zigbee2mqtt topic prefix. `Config.BaseURL` is the full public URL of the app, used in help docs. |
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. Owns connection resilience: background connect with retry, auto-reconnect, keepalive, a watchdog goroutine that restarts the client if paho stops trying, re-subscription per connection (guarded by a connection generation counter), and bounded waits on every broker operation. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
+| `status.go` | `GET /status` (minimal HTML health page) and `GET /status.json`. Reports MQTT connection state and history, binary version (`main.Version`, set with `-ldflags -X` by the Makefile and the pkg workflow; `dev` otherwise), uptime, goroutines/heap, SSE client count, and config counts. Deliberately outside the MQTT guard — it must answer when the broker is down. |
 | `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template+coolingMode. `PageData` includes config + `InitialState` + `CoolingMode`. Routes: `GET /` (template), `GET /api/events` (SSE), `GET/POST /api/mode` (heating/cooling), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event (including `homescreen/config/heating_mode`). |
 | `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `PageData` (config + initial state JSON). All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
 | `static/sw.js` | Service worker. Pre-caches offline page + static assets. Intercepts navigation requests — serves offline skeleton if server returns 5xx or network fails. |
@@ -151,16 +152,22 @@ Test files:
 - `handlers_test.go` — HTTP handlers with fake MQTT (no broker needed)
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
+- `status_test.go` — /status and /status.json, including with the broker down
 - `mqtt_test.go` — connection resilience: starting with no broker, broker appearing later, broker restart mid-session (starts its own throwaway mosquitto on a spare port)
 
-88 tests across six files. Integration/e2e tests clean up retained MQTT messages after themselves.
+95 tests across seven files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
 ```bash
-go build -o homescreen .
+go build -o homescreen .        # or: make build, which bakes in the version
 sudo systemctl restart homescreen
 ```
+
+`/status` reports the running binary's version. It reads `main.Version`, set at
+link time (`-ldflags "-X main.Version=..."`); a plain `go build` leaves it as
+`dev`, `make` uses `git describe`, and the pkg workflow uses the same string the
+pkg carries, so a version on `/status` identifies exactly what is deployed.
 
 The binary embeds `templates/index.html` and the entire `static/` directory via `go:embed`, so you must rebuild after template or static asset changes.
 
