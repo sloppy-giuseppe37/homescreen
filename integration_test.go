@@ -188,20 +188,26 @@ func TestIntegration_ZoneQuiet(t *testing.T) {
 
 // TestIntegration_LightPower tests toggling a light group.
 // The handler publishes to zigbee2mqtt/{entity}/set topics.
-// We verify the commands are published correctly by checking the cache
-// for the /set topics (the broker retains them).
+// We verify the commands are published correctly by subscribing to the
+// /set topics before the request, and that the broker does not retain them.
 func TestIntegration_LightPower(t *testing.T) {
 	skipIfNoMQTT(t)
 
 	app, cleanup := integrationApp(t)
 	defer cleanup()
 
-	// Subscribe to /set topics so we can verify publishes
 	prefix := app.Config.MQTT.TopicPrefix
 	setTopics := []string{
 		prefix + "/bed/set",
 		prefix + "/ceiling/set",
 	}
+	// Drop any commands retained by older builds so they can't fail the
+	// retained check below.
+	for _, topic := range setTopics {
+		app.MQTT.client.Publish(topic, 1, true, []byte{}).Wait()
+	}
+
+	// Subscribe to /set topics so we can verify publishes
 	for _, topic := range setTopics {
 		t := topic
 		app.MQTT.client.Subscribe(t, 1, func(_ mqtt.Client, msg mqtt.Message) {
@@ -237,6 +243,28 @@ func TestIntegration_LightPower(t *testing.T) {
 		if val != want {
 			t.Errorf("%s = %q, want %q", topic, val, want)
 		}
+	}
+
+	// A retained command is replayed to zigbee2mqtt every time it resubscribes,
+	// so restarting it would switch the light back on. A new subscriber only
+	// gets retained messages, so it must see nothing on these topics.
+	opts := mqtt.NewClientOptions().AddBroker(app.Config.MQTT.Broker).SetClientID("test-retained-check")
+	checker := mqtt.NewClient(opts)
+	if token := checker.Connect(); token.Wait() && token.Error() != nil {
+		t.Fatalf("checker connect: %v", token.Error())
+	}
+	defer checker.Disconnect(250)
+
+	retained := make(chan string, len(setTopics))
+	for _, topic := range setTopics {
+		checker.Subscribe(topic, 1, func(_ mqtt.Client, msg mqtt.Message) {
+			retained <- msg.Topic() + " = " + string(msg.Payload())
+		}).Wait()
+	}
+	select {
+	case got := <-retained:
+		t.Errorf("light command was retained: %s", got)
+	case <-time.After(300 * time.Millisecond):
 	}
 }
 

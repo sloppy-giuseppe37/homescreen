@@ -467,15 +467,18 @@ func (m *MQTTClient) GetValue(topic string) (string, bool) {
 	return val, ok
 }
 
-// Publish sends a value to an MQTT topic.
-// retained=true means the broker remembers this value for new subscribers.
+// Publish sends a retained value to an MQTT topic: the broker remembers it and
+// hands it to every future subscriber. Use it for topics that hold state.
 func (m *MQTTClient) Publish(topic, value string) error {
 	return m.publish(topic, 1, true, value)
 }
 
-// PublishNonRetained publishes a message without the retained flag.
+// PublishNonRetained sends a one-off message that the broker does not keep.
+// Use it for command topics such as zigbee2mqtt's /set: a retained command is
+// replayed whenever the consumer resubscribes, so a zigbee2mqtt restart would
+// re-apply the last command sent to each light.
 func (m *MQTTClient) PublishNonRetained(topic, value string) error {
-	return m.publish(topic, 0, false, value)
+	return m.publish(topic, 1, false, value)
 }
 
 // publish sends one message, failing fast instead of queueing when the broker

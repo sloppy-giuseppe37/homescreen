@@ -577,7 +577,7 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 			payload = `{"state":"OFF"}`
 		}
 		topic := light.SetTopic(prefix, entity)
-		if err := app.MQTT.Publish(topic, payload); err != nil {
+		if err := app.MQTT.PublishNonRetained(topic, payload); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
 		}
 	}
@@ -651,7 +651,7 @@ func (app *App) handleLightBrightness(w http.ResponseWriter, r *http.Request) {
 			continue // no cached state, skip
 		}
 		topic := light.SetTopic(prefix, entity)
-		if err := app.MQTT.Publish(topic, payload); err != nil {
+		if err := app.MQTT.PublishNonRetained(topic, payload); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", entity, err))
 		}
 	}

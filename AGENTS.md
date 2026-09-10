@@ -90,7 +90,7 @@ A light group with multiple entities uses **any-on logic**: the group shows ON i
 
 Config format uses `entities: [entity1, entity2]` (not a single `topic:` field).
 
-All heating publishes are retained (QoS 1). Light publishes use zigbee2mqtt conventions.
+All heating publishes are retained (QoS 1). Light commands to `/set` are QoS 1 but **not** retained: zigbee2mqtt resubscribes whenever it restarts, and a retained command would be re-applied then — switching lights on in the middle of the night.
 
 ## Zone aggregation
 
@@ -178,7 +178,7 @@ The binary embeds `templates/index.html` and the entire `static/` directory via 
 - **MQTT client ID conflicts**: The client ID is `homescreen-{shorthostname}-{pid}`. The PID matters: a broker evicts whichever client already holds an ID when a new one claims it, so two instances sharing an ID (a leftover process, a dev copy beside the service) would kick each other off in a permanent loop. You may still see "connection lost: EOF" in test logs when clients disconnect — that's expected.
 - **rc.subr claims `${name}_*` variable names**: the FreeBSD rc.d script lives in `scripts/build-pkg-repo.sh`. Defining `homescreen_program` made rc.subr replace `$command` with it, so `service homescreen start` ran the app directly — foreground, daemon(8)'s flags passed to the app as its own arguments, no supervision. `homescreen_user` similarly makes rc.subr wrap everything in `su(1)`. `rcd_test.go` guards against both; add new knobs under names rc.subr does not read.
 - **paho's `IsConnected()` is not "connected"**: with `ConnectRetry`/`AutoReconnect` set it also reports true while connecting or reconnecting, and a publish in that state is *queued*, with a token that never completes — `token.Wait()` would block a handler forever. `MQTTClient.IsConnected()` therefore tracks the real state (`connected` flag, set from the connect/lost callbacks and reconciled by the watchdog against `IsConnectionOpen()`), publishes fail fast rather than queue, and every token wait uses `WaitTimeout`.
-- **Retained messages**: All publishes are retained. Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads. The cooling mode e2e test also cleans up the `homescreen/config/heating_mode` topic.
+- **Retained messages**: `Publish` retains; `PublishNonRetained` doesn't (both QoS 1). State topics — heating and the mode topic — are retained so they arrive with the subscription. Command topics — zigbee2mqtt `/set` and `/get` — must not be, or the command is replayed to the device's bridge each time it resubscribes. Scene actions choose per action with `retained:` (default false). Tests must clean up retained messages to avoid polluting subsequent test runs. The `clearRetained()` helper publishes empty payloads. The cooling mode e2e test also cleans up the `homescreen/config/heating_mode` topic.
 - **Debounce on temp slider**: The frontend debounces temperature changes (300ms) to avoid flooding MQTT while dragging. The slider doesn't update from SSE while the user is actively dragging (`:active` pseudo-class check).
 - **SSE heartbeats**: The server sends `: heartbeat\n\n` every 15 seconds. Without this, proxies (Caddy, exe.dev proxy) and mobile Safari kill idle TCP connections after ~30s.
 - **Service worker scope**: `sw.js` is served from `/sw.js` (not `/static/sw.js`) so it has root scope and can intercept navigation requests to `/`.
