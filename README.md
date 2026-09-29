@@ -195,13 +195,14 @@ Requires mosquitto running on localhost:1883. To skip MQTT tests:
 SKIP_INTEGRATION=1 go test -v ./...
 ```
 
-There are 41 tests across five files:
+The main test files:
 
 | Level | File | What it tests |
 |---|---|---|
 | **Unit** | `config_test.go` | Config parsing, MQTT topic generation |
 | **Unit** | `sse_test.go` | Broadcaster add/remove, broadcast, slow client handling |
 | **Handler** | `handlers_test.go` | HTTP routing, error responses, template rendering, event building |
+| **Handler** | `api_test.go` | `/api` document: every path it hands out reaches its handler, endpoint list matches the router both ways, examples match real events |
 | **Integration** | `integration_test.go` | Full MQTT round-trip: publish → broker → cache |
 | **E2E** | `e2e_test.go` | Complete flow: HTTP POST → MQTT → SSE → verify. Multi-client sync, external MQTT changes, reconnect snapshots |
 
@@ -209,14 +210,37 @@ Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## API
 
-All POST endpoints accept `{"value": ...}` and return 204 on success.
+The web UI is just one client of an HTTP + SSE API, and the API describes
+itself: `GET /api` returns a JSON document with the conventions, every
+endpoint, the event formats, the rules the web UI applies on top of the raw
+state (zone aggregation, secret zones, slider behaviour), and the live
+inventory — every zone, heating room, light and scene, its current state, and
+the exact request each of its controls sends. To build another frontend (a
+wall touchscreen, a hardware button box), point a person or an agent at it:
+
+```sh
+curl -s http://homescreen:8000/api | jq '.zones[].name'
+```
+
+`GET /api/state` returns the current state as a JSON array — the same events
+the SSE stream opens with — for clients that poll rather than stream.
+
+`api_test.go` checks the document against the router in both directions, so a
+new route fails the tests until it is documented in `api.go`.
+
+The rest of the POST endpoints accept `{"value": ...}` and return 204 on success.
 
 | Endpoint | Value | Effect |
 |---|---|---|
+| `GET /api` | — | Self-describing API document (see above) |
+| `GET /api/state` | — | Current state of everything, as a JSON array |
 | `POST /api/heating/zone/{zone}/temperature` | number (e.g. `21`) | Sets target temp for all rooms in zone |
 | `POST /api/heating/zone/{zone}/quiet` | boolean | Sets quiet mode for all rooms in zone |
 | `POST /api/heating/room/{zone}/{room}/power` | boolean | Turns one room's heating on/off |
-| `POST /api/light/{zone}/{name}/power` | boolean | Turns one light on/off |
+| `POST /api/light/{zone}/{name}/power` | boolean, optional `"brightness"` | Turns one light on/off |
+| `POST /api/light/{zone}/{name}/brightness` | integer 0–254 | Dims a light (only bulbs that are on) |
+| `GET /api/mode`, `POST /api/mode` | `{"mode":"cooling"}` | Heating/cooling mode; changing it turns every room off |
+| `POST /api/scene/{name}` | no body | Runs a scene |
 | `GET /api/events` | — | SSE stream of state updates |
 
 ### SSE events
@@ -236,6 +260,7 @@ config.go                YAML config types and loader
 mqtt.go                  MQTT client, subscriptions, cache, publish
 sse.go                   SSE broadcaster with heartbeats (manages connected browser clients)
 handlers.go              HTTP handlers (page with initial state snapshot, API, SSE endpoint)
+api.go                   Self-describing API document (GET /api) and state snapshot (GET /api/state)
 templates/index.html     Go template — the full UI (HTML + CSS + JS)
 static/sw.js             Service worker (offline fallback, asset caching)
 static/offline.html      Offline skeleton page with shimmer placeholders

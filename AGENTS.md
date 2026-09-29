@@ -28,6 +28,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `mqtt.go` | `MQTTClient` — connects to broker, subscribes to topics from config, maintains `cache map[string]string`, calls `onChange` callback on every message. Owns connection resilience: background connect with retry, auto-reconnect, keepalive, a watchdog goroutine that restarts the client if paho stops trying, re-subscription per connection (guarded by a connection generation counter), and bounded waits on every broker operation. |
 | `sse.go` | `SSEBroadcaster` — manages set of `chan string` clients, broadcasts JSON to all. Drops messages for slow clients rather than blocking. Sends heartbeat comments every 15s to keep connections alive through proxies/mobile. |
 | `status.go` | `GET /status` (minimal HTML health page) and `GET /status.json`. Reports MQTT connection state and history, binary version (`main.Version`, set with `-ldflags -X` by the Makefile and the pkg workflow; `dev` otherwise), uptime, goroutines/heap, SSE client count, and config counts. Deliberately outside the MQTT guard — it must answer when the broker is down. |
+| `api.go` | `GET /api` — the self-describing API document for building other frontends: conventions, endpoint catalogue (`apiEndpoints`), SSE event docs (`apiEventDocs`), web-UI rules (`apiUIRules`), and the live inventory with pre-encoded request paths and current state. `GET /api/state` — the SSE snapshot as a JSON array. The prose is part of the interface: **when you change an endpoint, an event's fields, or a UI rule, update `api.go` too.** `api_test.go` fails if a route under `SetupRoutes` is undocumented, a documented path doesn't match a route, or example events drift from real ones. `/api` answers with the broker down (`broker_connected: false`, no state). |
 | `handlers.go` | `App` struct holds Config+MQTT+Broadcaster+Template+coolingMode. `PageData` includes config + `InitialState` + `CoolingMode`. Routes: `GET /` (template), `GET /api/events` (SSE), `GET/POST /api/mode` (heating/cooling), POST endpoints for heating/lights. `TopicToEvent()` maps MQTT topic+value to JSON SSE event (including `homescreen/config/heating_mode`). |
 | `templates/index.html` | Go `text/template` (NOT `html/template` — the latter breaks on complex JS in `<script>` tags). Receives `PageData` (config + initial state JSON). All zone/room/light HTML is generated from config. JS handles SSE, POST calls, zone aggregation. |
 | `static/sw.js` | Service worker. Pre-caches offline page + static assets. Intercepts navigation requests — serves offline skeleton if server returns 5xx or network fails. |
@@ -108,6 +109,8 @@ When turning a room ON via `handleRoomPower`, the backend publishes the cached t
 ## API
 
 ```
+GET  /api                                  self-describing API document (api.go) — works with broker down
+GET  /api/state                            JSON array of state events (the SSE snapshot)
 POST /api/heating/zone/{zone}/temperature  {"value": 21}      → publishes to all rooms
 POST /api/heating/zone/{zone}/quiet        {"value": true}    → publishes to all rooms
 POST /api/heating/room/{zone}/{room}/power {"value": true}    → single room (sends "1" or "2" based on mode)
@@ -153,10 +156,11 @@ Test files:
 - `integration_test.go` — real MQTT round-trips
 - `e2e_test.go` — full HTTP+MQTT+SSE flows, multi-client sync, external changes
 - `status_test.go` — /status and /status.json, including with the broker down
+- `api_test.go` — /api and /api/state: the document's paths reach their handlers, its endpoint list matches the router both ways, example events match real ones
 - `rcd_test.go` — the embedded FreeBSD rc.d script (supervision flags, rc.subr name collisions)
 - `mqtt_test.go` — connection resilience: starting with no broker, broker appearing later, broker restart mid-session (starts its own throwaway mosquitto on a spare port)
 
-97 tests across eight files. Integration/e2e tests clean up retained MQTT messages after themselves.
+112 tests across 9 files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
@@ -193,7 +197,7 @@ To add a new device type (e.g. blinds):
 2. Add it to `ZoneConfig`
 3. Subscribe to its topics in `mqtt.go` (via `allTopics()`)
 4. Add a `buildBlindEvent()` and new SSE event type in `handlers.go`
-5. Add API endpoint(s) in `handlers.go` + `SetupRoutes()`
+5. Add API endpoint(s) in `handlers.go` + `SetupRoutes()`, and describe them (endpoints, events, inventory) in `api.go`
 6. Add UI section in `templates/index.html`
 7. Add tests
 

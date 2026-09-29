@@ -4,6 +4,8 @@ package main
 //
 // Routes:
 //   GET  /              → serves the HTML page (Go template, rendered from config)
+//   GET  /api           → self-describing API document for other frontends (api.go)
+//   GET  /api/state     → current state of everything as a JSON array (api.go)
 //   GET  /api/events    → SSE stream of state updates
 //   GET  /status        → health page (works with the broker down)
 //   GET  /status.json   → the same, for scripts
@@ -62,9 +64,18 @@ type PageData struct {
 	HasScenes    bool   // true if any scenes are configured
 }
 
+// routeRegistrar is the part of *http.ServeMux that SetupRoutes uses, so tests
+// can record which routes exist.
+type routeRegistrar interface {
+	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
+}
+
 // SetupRoutes registers all HTTP routes on the given ServeMux.
-func (app *App) SetupRoutes(mux *http.ServeMux) {
+func (app *App) SetupRoutes(mux routeRegistrar) {
 	mux.HandleFunc("GET /", app.handleIndex)
+	mux.HandleFunc("GET /api", app.handleAPIDoc)
+	mux.HandleFunc("GET /api/{$}", app.handleAPIDoc)
+	mux.HandleFunc("GET /api/state", app.handleAPIState)
 	mux.HandleFunc("GET /api/events", app.handleSSE)
 	mux.HandleFunc("POST /api/heating/zone/{zone}/temperature", app.handleZoneTemperature)
 	mux.HandleFunc("POST /api/heating/zone/{zone}/quiet", app.handleZoneQuiet)
@@ -764,6 +775,9 @@ var timeAfter = func(ms int) <-chan struct{} {
 }
 
 func (app *App) handleScene(w http.ResponseWriter, r *http.Request) {
+	if !app.checkMQTT(w) {
+		return
+	}
 	name := r.PathValue("name")
 
 	// Find the scene by name
