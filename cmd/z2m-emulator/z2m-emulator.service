@@ -1,0 +1,19 @@
+# Fake zigbee2mqtt bridge for development machines. Install with:
+#   go build -o /usr/local/bin/z2m-emulator ./cmd/z2m-emulator
+#   sudo cp cmd/z2m-emulator/z2m-emulator.service /etc/systemd/system/
+#   sudo systemctl enable --now z2m-emulator
+# Never run it beside a real zigbee2mqtt: both would answer every command.
+[Unit]
+Description=zigbee2mqtt emulator (development only)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=exedev
+ExecStart=/usr/local/bin/z2m-emulator
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

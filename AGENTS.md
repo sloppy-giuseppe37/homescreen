@@ -40,6 +40,7 @@ The app is an installable PWA with offline support. Static assets (fonts, icons,
 | `static/icons/` | PWA icons: `icon-192.png`, `icon-512.png` (house icon on orange). |
 | `docs/` | User documentation served at `/help/`. Contains `README.md` (markdown) and `images/` (screenshots). The help page template (`templates/help.html`) renders the markdown client-side using vendored marked.js and github-markdown.css. `BaseURL` from config is injected for back-link and display. |
 | `homescreen.service` | systemd unit. Runs on port 8000, after mosquitto. |
+| `cmd/z2m-emulator/` | Development-only fake zigbee2mqtt bridge: answers `{prefix}/{entity}/set` and `/get` with state from in-memory bulbs (the config's light entities, all OFF and dimmable at start; `-on-off a,b` makes some switch-only). Without a bridge, light POSTs return 204 but lights never change. Separate `package main`, not part of the homescreen binary; its unit file says how to install it. Never run it beside a real zigbee2mqtt. |
 
 ## Config
 
@@ -207,4 +208,5 @@ To add a new device type (e.g. blinds):
 |---|---|---|
 | mosquitto | 1883 (localhost only) | `systemctl status mosquitto` |
 | homescreen | 8000 | `systemctl status homescreen` |
+| z2m-emulator (dev machine only) | — | `systemctl status z2m-emulator` |
 
