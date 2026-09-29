@@ -34,10 +34,10 @@ type MQTTConfig struct {
 // ZoneConfig represents a physical zone in the house (e.g. "Upstairs").
 // Each zone can have heating units and/or lights.
 type ZoneConfig struct {
-	Name    string         `yaml:"name"`
-	Secret  bool           `yaml:"secret"`  // if true, hidden unless user enables secret mode
-	Heating []HeatingRoom  `yaml:"heating"` // may be empty
-	Lights  []LightConfig  `yaml:"lights"`  // may be empty
+	Name    string        `yaml:"name"`
+	Secret  bool          `yaml:"secret"`  // if true, hidden unless user enables secret mode
+	Heating []HeatingRoom `yaml:"heating"` // may be empty
+	Lights  []LightConfig `yaml:"lights"`  // may be empty
 }
 
 // SceneConfig defines a preset scene that publishes a batch of MQTT messages.
@@ -57,7 +57,8 @@ type SceneAction struct {
 
 // HeatingRoom maps a room name to its Faikin unit ID.
 // The unit ID is used to construct MQTT topics like:
-//   HomeKit/<unit_id>_Thermostat/Thermostat/TargetTemperature
+//
+//	HomeKit/<unit_id>_Thermostat/Thermostat/TargetTemperature
 type HeatingRoom struct {
 	Name   string `yaml:"name"`    // display name, e.g. "Bedroom"
 	UnitID string `yaml:"unit_id"` // e.g. "BedroomFaikin"
@@ -115,8 +116,8 @@ func (r HeatingRoom) HeatingTopics() (power, temp, quiet string) {
 
 // LoadConfig reads and parses the YAML config file.
 // It searches these paths in order and uses the first one found:
-//   1. ~/.config/homescreen/config.yaml
-//   2. /etc/homescreen.yaml
+//  1. ~/.config/homescreen/config.yaml
+//  2. /etc/homescreen.yaml
 func LoadConfig() (*Config, error) {
 	path, err := findConfigFile()
 	if err != nil {

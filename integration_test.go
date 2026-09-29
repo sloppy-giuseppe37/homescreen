@@ -12,12 +12,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"text/template"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -79,7 +79,8 @@ func integrationApp(t *testing.T) (*App, func()) {
 }
 
 // TestIntegration_RoomPower tests the full flow:
-//   POST /api/heating/room/.../power → MQTT publish → cache updated
+//
+//	POST /api/heating/room/.../power → MQTT publish → cache updated
 func TestIntegration_RoomPower(t *testing.T) {
 	skipIfNoMQTT(t)
 

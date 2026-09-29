@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"text/template"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"text/template"
 )
 
 // testConfig returns a small config for testing.
@@ -90,8 +90,8 @@ func testAppDisconnected() *App {
 func TestTopicToEvent_HeatingPower(t *testing.T) {
 	app := testApp(map[string]string{
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "1",
-		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "21.0",
-		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "0",
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":         "21.0",
+		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                           "0",
 	})
 
 	eventJSON := app.TopicToEvent(
@@ -224,8 +224,8 @@ func TestHandleIndex_InitialState(t *testing.T) {
 	// Pre-populate the MQTT cache with known values
 	app := testApp(map[string]string{
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "1",
-		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "23.0",
-		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "1",
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":         "23.0",
+		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                           "1",
 		"zigbee2mqtt/bed": `{"state":"ON"}`,
 	})
 
@@ -263,7 +263,7 @@ func TestHandleIndex_InitialState(t *testing.T) {
 func TestBuildSnapshot(t *testing.T) {
 	app := testApp(map[string]string{
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature": "22.0",
-		"zigbee2mqtt/fairy_lights": `{"state":"ON"}`,
+		"zigbee2mqtt/fairy_lights":                                      `{"state":"ON"}`,
 	})
 
 	snapshot := app.buildSnapshot()
@@ -563,7 +563,7 @@ func TestBuildLightEvent_BrightnessOff(t *testing.T) {
 // entities that report it, and brightness_on reflects only those entities.
 func TestBuildLightEvent_MixedBrightness(t *testing.T) {
 	app := testApp(map[string]string{
-		"zigbee2mqtt/bed":     `{"state":"ON"}`,              // no brightness support
+		"zigbee2mqtt/bed":     `{"state":"ON"}`,                   // no brightness support
 		"zigbee2mqtt/ceiling": `{"state":"OFF","brightness":180}`, // brightness, but OFF
 	})
 
@@ -668,9 +668,9 @@ func TestHandleLightBrightness_OutOfRange(t *testing.T) {
 func TestBuildLightEvent_UnavailableEntity(t *testing.T) {
 	app := testApp(map[string]string{
 		"zigbee2mqtt/bed":                  `{"state":"ON"}`,
-		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
-		"zigbee2mqtt/ceiling":               `{"state":"OFF"}`,
-		"zigbee2mqtt/ceiling/availability":   `{"state":"online"}`,
+		"zigbee2mqtt/bed/availability":     `{"state":"offline"}`,
+		"zigbee2mqtt/ceiling":              `{"state":"OFF"}`,
+		"zigbee2mqtt/ceiling/availability": `{"state":"online"}`,
 	})
 
 	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
@@ -688,8 +688,8 @@ func TestBuildLightEvent_UnavailableEntity(t *testing.T) {
 // "offline" (not JSON) is also recognized as unavailable.
 func TestBuildLightEvent_UnavailablePlainString(t *testing.T) {
 	app := testApp(map[string]string{
-		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
-		"zigbee2mqtt/bed/availability":      "offline",
+		"zigbee2mqtt/bed":              `{"state":"ON","brightness":200}`,
+		"zigbee2mqtt/bed/availability": "offline",
 	})
 
 	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed"}})
@@ -711,9 +711,9 @@ func TestBuildLightEvent_UnavailablePlainString(t *testing.T) {
 func TestBuildLightEvent_MixedAvailability(t *testing.T) {
 	app := testApp(map[string]string{
 		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
-		"zigbee2mqtt/bed/availability":      `{"state":"online"}`,
-		"zigbee2mqtt/ceiling":               `{"state":"ON","brightness":150}`,
-		"zigbee2mqtt/ceiling/availability":   `{"state":"offline"}`,
+		"zigbee2mqtt/bed/availability":     `{"state":"online"}`,
+		"zigbee2mqtt/ceiling":              `{"state":"ON","brightness":150}`,
+		"zigbee2mqtt/ceiling/availability": `{"state":"offline"}`,
 	})
 
 	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
@@ -757,8 +757,8 @@ func TestBuildLightEvent_NoAvailabilityMessage(t *testing.T) {
 // triggers a light event re-emission.
 func TestTopicToEvent_Availability(t *testing.T) {
 	app := testApp(map[string]string{
-		"zigbee2mqtt/bed":                  `{"state":"ON"}`,
-		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
+		"zigbee2mqtt/bed":              `{"state":"ON"}`,
+		"zigbee2mqtt/bed/availability": `{"state":"offline"}`,
 	})
 
 	// An availability change for "bed" should produce a light event
@@ -783,9 +783,9 @@ func TestTopicToEvent_Availability(t *testing.T) {
 func TestBuildLightEvent_AllUnavailable(t *testing.T) {
 	app := testApp(map[string]string{
 		"zigbee2mqtt/bed":                  `{"state":"ON","brightness":200}`,
-		"zigbee2mqtt/bed/availability":      `{"state":"offline"}`,
-		"zigbee2mqtt/ceiling":               `{"state":"ON","brightness":150}`,
-		"zigbee2mqtt/ceiling/availability":   `{"state":"offline"}`,
+		"zigbee2mqtt/bed/availability":     `{"state":"offline"}`,
+		"zigbee2mqtt/ceiling":              `{"state":"ON","brightness":150}`,
+		"zigbee2mqtt/ceiling/availability": `{"state":"offline"}`,
 	})
 
 	eventJSON := app.buildLightEvent("Upstairs", LightConfig{Name: "Bedroom", Entities: []string{"bed", "ceiling"}})
@@ -808,13 +808,13 @@ func TestHandleIndex_SecretZone(t *testing.T) {
 		MQTT: MQTTConfig{Broker: "tcp://localhost:1883", TopicPrefix: "zigbee2mqtt"},
 		Zones: []ZoneConfig{
 			{
-				Name:   "Public",
-				Secret: false,
+				Name:    "Public",
+				Secret:  false,
 				Heating: []HeatingRoom{{Name: "Room1", UnitID: "Room1Faikin"}},
 			},
 			{
-				Name:   "SecretLair",
-				Secret: true,
+				Name:    "SecretLair",
+				Secret:  true,
 				Heating: []HeatingRoom{{Name: "Bunker", UnitID: "BunkerFaikin"}},
 				Lights:  []LightConfig{{Name: "HiddenLight", Entities: []string{"hidden1"}}},
 			},
@@ -1119,8 +1119,8 @@ func TestSetMode_503WhenMQTTDisconnected(t *testing.T) {
 func TestBuildHeatingEvent_CoolPower(t *testing.T) {
 	app := testApp(map[string]string{
 		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetHeatingCoolingState": "2",
-		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":        "22.0",
-		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                          "0",
+		"HomeKit/BedroomFaikin_Thermostat/Thermostat/TargetTemperature":         "22.0",
+		"HomeKit/BedroomFaikin_IndoorQuiet/Switch/On":                           "0",
 	})
 
 	eventJSON := app.buildHeatingEvent("Upstairs", app.Config.Zones[0].Heating[0])

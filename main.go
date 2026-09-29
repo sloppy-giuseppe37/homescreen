@@ -8,12 +8,12 @@ package main
 import (
 	"embed"
 	"io/fs"
-	"text/template"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"text/template"
 )
 
 // Embed the HTML template into the binary so we don't need

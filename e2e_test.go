@@ -16,7 +16,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	mqttlib "github.com/eclipse/paho.mqtt.golang"
@@ -406,20 +405,20 @@ func TestE2E_IndexPage(t *testing.T) {
 
 	// Check for key UI elements
 	checks := []string{
-		"Home Control",       // page title
+		"Home Control",         // page title
 		"data-tab=\"lights\"",  // lights tab
 		"data-tab=\"heating\"", // heating tab
-		"data-temp-zone",      // temperature slider
-		"data-quiet-zone",     // quiet toggle
-		"data-room",           // room power toggle
-		"data-light",          // light toggle
-		"connectSSE",          // SSE connection function
-		"EventSource",         // SSE API usage
+		"data-temp-zone",       // temperature slider
+		"data-quiet-zone",      // quiet toggle
+		"data-room",            // room power toggle
+		"data-light",           // light toggle
+		"connectSSE",           // SSE connection function
+		"EventSource",          // SSE API usage
 		"connection-overlay",   // connection overlay
-		"Upstairs",            // zone from config
-		"Downstairs",          // zone from config
-		"Bedroom",             // room from config
-		"Kitchen",             // room from config
+		"Upstairs",             // zone from config
+		"Downstairs",           // zone from config
+		"Bedroom",              // room from config
+		"Kitchen",              // room from config
 	}
 
 	for _, check := range checks {
@@ -528,14 +527,13 @@ func TestE2E_SSEReconnectGetsSnapshot(t *testing.T) {
 	defer closeSSE()
 
 	// The snapshot should contain the current state
-	event, ok := waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
+	_, ok := waitForEvent(events, 3*time.Second, func(e map[string]any) bool {
 		return e["type"] == "heating" && e["room"] == "Bedroom" &&
 			e["power"] == true && e["target_temp"] == 23.0
 	})
 	if !ok {
 		t.Fatal("reconnected client did not receive current state in snapshot")
 	}
-	fmt.Sprintf("%v", event) // prevent unused warning
 }
 
 // TestE2E_CoolingMode tests the full cooling mode flow:
