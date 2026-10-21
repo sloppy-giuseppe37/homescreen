@@ -1265,3 +1265,31 @@ func TestSyncModeFromMQTT(t *testing.T) {
 		t.Error("expected heating mode when the broker has no mode message")
 	}
 }
+
+// TestBoolEndpoints_RejectNonBool verifies that the on/off endpoints return
+// 400 for a value that isn't a boolean, rather than treating it as off.
+func TestBoolEndpoints_RejectNonBool(t *testing.T) {
+	paths := []string{
+		"/api/heating/zone/Upstairs/quiet",
+		"/api/heating/room/Upstairs/Bedroom/power",
+		"/api/light/Upstairs/Bedroom/power",
+	}
+	bodies := []string{`{"value": "true"}`, `{"value": 1}`, `{"value": null}`, `{}`}
+
+	app := testApp(nil)
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	for _, path := range paths {
+		for _, body := range bodies {
+			req := httptest.NewRequest("POST", path, bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != 400 {
+				t.Errorf("POST %s %s: status = %d, want 400", path, body, w.Code)
+			}
+		}
+	}
+}

@@ -347,31 +347,31 @@ var apiEndpoints = []apiEndpoint{
 		Path:    "/api/heating/zone/{zone}/quiet",
 		Summary: "Turn quiet (low-noise) mode on or off for every heating room in the zone.",
 		Body: map[string]string{
-			"value": "boolean. Anything other than true turns quiet mode off.",
+			"value": "boolean (400 if it is anything else).",
 		},
 		Example:   map[string]any{"value": true},
-		Responses: map[string]string{"204": "sent", "400": "invalid JSON", "404": "unknown zone", "500": "publish failed", "503": "broker unreachable"},
+		Responses: map[string]string{"204": "sent", "400": "invalid JSON, or value is not a boolean", "404": "unknown zone", "500": "publish failed", "503": "broker unreachable"},
 	},
 	{
 		Method:  "POST",
 		Path:    "/api/heating/room/{zone}/{room}/power",
 		Summary: "Turn one heating room on or off. On means heat or cool depending on the global mode (see /api/mode); the room's current setpoint is re-sent first so it starts at the right temperature.",
 		Body: map[string]string{
-			"value": "boolean. Anything other than true turns the room off.",
+			"value": "boolean (400 if it is anything else).",
 		},
 		Example:   map[string]any{"value": true},
-		Responses: map[string]string{"204": "sent", "400": "invalid JSON", "404": "unknown zone or room", "500": "publish failed", "503": "broker unreachable"},
+		Responses: map[string]string{"204": "sent", "400": "invalid JSON, or value is not a boolean", "404": "unknown zone or room", "500": "publish failed", "503": "broker unreachable"},
 	},
 	{
 		Method:  "POST",
 		Path:    "/api/light/{zone}/{name}/power",
 		Summary: "Turn a light on or off. A light may be a group of several bulbs; this switches all of them.",
 		Body: map[string]string{
-			"value":      "boolean. Anything other than true turns the light off.",
+			"value":      "boolean (400 if it is anything else).",
 			"brightness": "optional integer 0–254, only used when turning on: bulbs that support dimming come on at this level. Send the level your brightness control shows so the light doesn't come on at a stale level.",
 		},
 		Example:   map[string]any{"value": true, "brightness": 200},
-		Responses: map[string]string{"204": "sent", "400": "invalid JSON", "404": "unknown zone or light", "500": "publish failed", "503": "broker unreachable"},
+		Responses: map[string]string{"204": "sent", "400": "invalid JSON, or value is not a boolean", "404": "unknown zone or light", "500": "publish failed", "503": "broker unreachable"},
 	},
 	{
 		Method:  "POST",

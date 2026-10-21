@@ -432,9 +432,15 @@ func (app *App) handleZoneQuiet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	quiet, ok := req.Value.(bool)
+	if !ok {
+		http.Error(w, "value must be true or false", http.StatusBadRequest)
+		return
+	}
+
 	// Convert bool to "0" or "1"
 	val := "0"
-	if b, ok := req.Value.(bool); ok && b {
+	if quiet {
 		val = "1"
 	}
 
@@ -487,9 +493,15 @@ func (app *App) handleRoomPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	on, ok := req.Value.(bool)
+	if !ok {
+		http.Error(w, "value must be true or false", http.StatusBadRequest)
+		return
+	}
+
 	// "1" = heating on, "2" = cooling on, "0" = off
 	val := "0"
-	if b, ok := req.Value.(bool); ok && b {
+	if on {
 		if app.IsCoolingMode() {
 			val = "2"
 		} else {
@@ -552,9 +564,10 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	turningOn := false
-	if b, ok := req.Value.(bool); ok && b {
-		turningOn = true
+	turningOn, ok := req.Value.(bool)
+	if !ok {
+		http.Error(w, "value must be true or false", http.StatusBadRequest)
+		return
 	}
 
 	// Publish to every entity in this light group.
