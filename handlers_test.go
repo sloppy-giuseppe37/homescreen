@@ -1293,3 +1293,24 @@ func TestBoolEndpoints_RejectNonBool(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleZoneTemperature_OutOfRange tests that a setpoint outside the
+// accepted range returns 400 instead of being published.
+func TestHandleZoneTemperature_OutOfRange(t *testing.T) {
+	app := testApp(nil)
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	for _, value := range []string{"9.9", "32.1", "70", "-5", "1e308"} {
+		req := httptest.NewRequest("POST", "/api/heating/zone/Upstairs/temperature",
+			bytes.NewBufferString(`{"value": `+value+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != 400 {
+			t.Errorf("value %s: status = %d, want 400", value, w.Code)
+		}
+	}
+}

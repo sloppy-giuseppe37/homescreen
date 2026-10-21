@@ -371,6 +371,15 @@ func (app *App) findZone(name string) *ZoneConfig {
 	return nil
 }
 
+// Target temperatures (°C) outside this range are rejected. It is wider than
+// the web UI's 16–25 slider, so other clients keep some latitude, but stops a
+// stray value — a typo, a Fahrenheit reading — being stored as a retained
+// setpoint on every unit in the zone.
+const (
+	minTargetTemp = 10.0
+	maxTargetTemp = 32.0
+)
+
 // handleZoneTemperature sets the target temperature for ALL rooms in a zone.
 // This is because the UI has one slider per zone, not per room.
 func (app *App) handleZoneTemperature(w http.ResponseWriter, r *http.Request) {
@@ -394,6 +403,10 @@ func (app *App) handleZoneTemperature(w http.ResponseWriter, r *http.Request) {
 	tempFloat, ok := req.Value.(float64)
 	if !ok {
 		http.Error(w, "value must be a number", http.StatusBadRequest)
+		return
+	}
+	if tempFloat < minTargetTemp || tempFloat > maxTargetTemp {
+		http.Error(w, fmt.Sprintf("value must be %g–%g", minTargetTemp, maxTargetTemp), http.StatusBadRequest)
 		return
 	}
 	tempStr := strconv.FormatFloat(tempFloat, 'f', 1, 64)

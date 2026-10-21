@@ -161,7 +161,7 @@ Test files:
 - `rcd_test.go` — the embedded FreeBSD rc.d script (supervision flags, rc.subr name collisions)
 - `mqtt_test.go` — connection resilience: starting with no broker, broker appearing later, broker restart mid-session (starts its own throwaway mosquitto on a spare port)
 
-116 tests across 9 files. Integration/e2e tests clean up retained MQTT messages after themselves.
+117 tests across 9 files. Integration/e2e tests clean up retained MQTT messages after themselves.
 
 ## Build and deploy
 
