@@ -371,13 +371,13 @@ func (app *App) findZone(name string) *ZoneConfig {
 	return nil
 }
 
-// Target temperatures (°C) outside this range are rejected. It is wider than
-// the web UI's 16–25 slider, so other clients keep some latitude, but stops a
-// stray value — a typo, a Fahrenheit reading — being stored as a retained
-// setpoint on every unit in the zone.
+// Target temperatures (°C) outside this range are rejected, so a stray value —
+// a typo, a Fahrenheit reading — is never stored as a retained setpoint on every
+// unit in the zone. It matches the web UI's slider (templates/index.html); keep
+// the two in step.
 const (
-	minTargetTemp = 10.0
-	maxTargetTemp = 32.0
+	minTargetTemp = 16.0
+	maxTargetTemp = 25.0
 )
 
 // handleZoneTemperature sets the target temperature for ALL rooms in a zone.

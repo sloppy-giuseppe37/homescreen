@@ -338,7 +338,7 @@ var apiEndpoints = []apiEndpoint{
 		Path:    "/api/heating/zone/{zone}/temperature",
 		Summary: "Set the target temperature (°C) of every heating room in the zone, including rooms that are off, so they start at this setpoint when turned on.",
 		Body: map[string]string{
-			"value": fmt.Sprintf("number, °C, %g–%g, rounded to one decimal place. The server only rejects values outside that range, so offer a narrower one in the client: the web UI offers whole degrees from 16 to 25, in both heating and cooling mode. There is one setpoint per room, shared by both modes.", minTargetTemp, maxTargetTemp),
+			"value": fmt.Sprintf("number, °C, %g–%g, rounded to one decimal place; anything outside that range is rejected. The web UI offers whole degrees across the same range, in both heating and cooling mode. There is one setpoint per room, shared by both modes.", minTargetTemp, maxTargetTemp),
 		},
 		Example:   map[string]any{"value": 21},
 		Responses: map[string]string{"204": "sent", "400": fmt.Sprintf("value is not a number, or outside %g–%g", minTargetTemp, maxTargetTemp), "404": "unknown zone", "500": "publish failed", "503": "broker unreachable"},

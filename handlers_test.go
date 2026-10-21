@@ -1302,7 +1302,7 @@ func TestHandleZoneTemperature_OutOfRange(t *testing.T) {
 	mux := http.NewServeMux()
 	app.SetupRoutes(mux)
 
-	for _, value := range []string{"9.9", "32.1", "70", "-5", "1e308"} {
+	for _, value := range []string{"15.9", "25.1", "70", "-5", "1e308"} {
 		req := httptest.NewRequest("POST", "/api/heating/zone/Upstairs/temperature",
 			bytes.NewBufferString(`{"value": `+value+`}`))
 		req.Header.Set("Content-Type", "application/json")
