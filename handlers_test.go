@@ -1314,3 +1314,26 @@ func TestHandleZoneTemperature_OutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleLightPower_BrightnessOutOfRange tests that an initial brightness
+// outside 0-254 returns 400 instead of being sent to the bulbs.
+func TestHandleLightPower_BrightnessOutOfRange(t *testing.T) {
+	app := testApp(map[string]string{
+		"zigbee2mqtt/bed": `{"state":"OFF","brightness":100}`,
+	})
+
+	mux := http.NewServeMux()
+	app.SetupRoutes(mux)
+
+	for _, brightness := range []string{"-1", "255", "100000"} {
+		req := httptest.NewRequest("POST", "/api/light/Upstairs/Bedroom/power",
+			bytes.NewBufferString(`{"value": true, "brightness": `+brightness+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != 400 {
+			t.Errorf("brightness %s: status = %d, want 400", brightness, w.Code)
+		}
+	}
+}

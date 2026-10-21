@@ -372,7 +372,7 @@ var apiEndpoints = []apiEndpoint{
 			"brightness": "optional integer 0–254, only used when turning on: bulbs that support dimming come on at this level. Send the level your brightness control shows so the light doesn't come on at a stale level.",
 		},
 		Example:   map[string]any{"value": true, "brightness": 200},
-		Responses: map[string]string{"204": "sent", "400": "invalid JSON, or value is not a boolean", "404": "unknown zone or light", "500": "publish failed", "503": "broker unreachable"},
+		Responses: map[string]string{"204": "sent", "400": "invalid JSON, value is not a boolean, or brightness is outside 0–254", "404": "unknown zone or light", "500": "publish failed", "503": "broker unreachable"},
 	},
 	{
 		Method:  "POST",

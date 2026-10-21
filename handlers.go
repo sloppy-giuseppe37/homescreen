@@ -582,6 +582,10 @@ func (app *App) handleLightPower(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "value must be true or false", http.StatusBadRequest)
 		return
 	}
+	if req.Brightness != nil && (*req.Brightness < 0 || *req.Brightness > 254) {
+		http.Error(w, "brightness must be 0-254", http.StatusBadRequest)
+		return
+	}
 
 	// Publish to every entity in this light group.
 	// When turning ON with a brightness value, brightness-capable entities
