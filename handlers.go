@@ -122,18 +122,27 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 // This is embedded in the HTML so the browser has state on first paint.
 func (app *App) buildSnapshot() string {
 	var events []json.RawMessage
-	// Mode event first so the frontend knows heating/cooling before processing rooms
-	events = append(events, json.RawMessage(app.buildModeEvent()))
-	for _, zone := range app.Config.Zones {
-		for _, room := range zone.Heating {
-			events = append(events, json.RawMessage(app.buildHeatingEvent(zone.Name, room)))
-		}
-		for _, light := range zone.Lights {
-			events = append(events, json.RawMessage(app.buildLightEvent(zone.Name, light)))
-		}
+	for _, event := range app.snapshotEvents() {
+		events = append(events, json.RawMessage(event))
 	}
 	data, _ := json.Marshal(events)
 	return string(data)
+}
+
+// snapshotEvents returns the current state as individual JSON events: the
+// mode, then every heating room and every light.
+func (app *App) snapshotEvents() []string {
+	// Mode event first so the frontend knows heating/cooling before processing rooms
+	events := []string{app.buildModeEvent()}
+	for _, zone := range app.Config.Zones {
+		for _, room := range zone.Heating {
+			events = append(events, app.buildHeatingEvent(zone.Name, room))
+		}
+		for _, light := range zone.Lights {
+			events = append(events, app.buildLightEvent(zone.Name, light))
+		}
+	}
+	return events
 }
 
 // ---------- SSE handler ----------
@@ -145,21 +154,7 @@ func (app *App) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "MQTT broker unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	app.Broadcaster.ServeHTTP(w, r, func(ch chan string) {
-		// Send mode event first so client knows heating/cooling
-		ch <- app.buildModeEvent()
-		// Send current state for every heating room and every light
-		for _, zone := range app.Config.Zones {
-			for _, room := range zone.Heating {
-				event := app.buildHeatingEvent(zone.Name, room)
-				ch <- event
-			}
-			for _, light := range zone.Lights {
-				event := app.buildLightEvent(zone.Name, light)
-				ch <- event
-			}
-		}
-	})
+	app.Broadcaster.ServeHTTP(w, r, app.snapshotEvents)
 }
 
 // buildHeatingEvent creates a JSON event string for one heating room

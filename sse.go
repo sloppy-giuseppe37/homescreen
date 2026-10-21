@@ -102,7 +102,7 @@ func (b *SSEBroadcaster) Broadcast(jsonData string) {
 
 // ServeHTTP handles the GET /api/events endpoint.
 // It sends the initial state snapshot, then streams updates.
-func (b *SSEBroadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request, sendSnapshot func(ch chan string)) {
+func (b *SSEBroadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request, snapshot func() []string) {
 	// SSE requires the response to stay open and stream data.
 	// We need the Flusher interface to push data immediately.
 	flusher, ok := w.(http.Flusher)
@@ -121,10 +121,14 @@ func (b *SSEBroadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request, sendS
 	ch := b.addClient()
 	defer b.removeClient(ch)
 
-	// Send the full current state as the initial snapshot.
-	// This is called while the client channel is registered, so any
-	// MQTT messages that arrive during the snapshot will be queued in ch.
-	sendSnapshot(ch)
+	// Send the full current state as the initial snapshot. It is built after
+	// the client channel is registered, so any MQTT message that arrives while
+	// we write it is queued in ch and sent after it. It is written straight to
+	// the response rather than through ch: nothing reads ch until the loop
+	// below, so a snapshot bigger than its buffer would block here forever.
+	for _, event := range snapshot() {
+		fmt.Fprintf(w, "data: %s\n\n", event)
+	}
 	flusher.Flush()
 
 	// Send a heartbeat comment every 15 seconds to keep the connection

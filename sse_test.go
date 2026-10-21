@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -200,7 +202,7 @@ func TestSSEBroadcaster_ServeHTTPEndsOnDisconnectAll(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		b.ServeHTTP(w, req, func(ch chan string) {})
+		b.ServeHTTP(w, req, func() []string { return nil })
 		close(done)
 	}()
 
@@ -221,5 +223,36 @@ func TestSSEBroadcaster_ServeHTTPEndsOnDisconnectAll(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "data: \n") {
 		t.Error("stream contains empty data events")
+	}
+}
+
+// TestSSEBroadcaster_LargeSnapshot verifies that a snapshot bigger than a
+// client's channel buffer is sent in full instead of blocking the handler.
+func TestSSEBroadcaster_LargeSnapshot(t *testing.T) {
+	b := NewSSEBroadcaster()
+	w := httptest.NewRecorder()
+	// An already-cancelled request makes ServeHTTP return right after the snapshot
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest("GET", "/api/events", nil).WithContext(ctx)
+
+	events := make([]string, 200) // far more than the 64-message buffer
+	for i := range events {
+		events[i] = fmt.Sprintf(`{"n":%d}`, i)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w, req, func() []string { return events })
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP blocked sending a large snapshot")
+	}
+	if got := strings.Count(w.Body.String(), "data: "); got != len(events) {
+		t.Errorf("sent %d events, want %d", got, len(events))
 	}
 }
