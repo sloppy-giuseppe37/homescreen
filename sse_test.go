@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,4 +178,48 @@ func TestSSEBroadcaster_DisconnectAll_Empty(t *testing.T) {
 	b := NewSSEBroadcaster()
 	// Should not panic
 	b.DisconnectAll()
+}
+
+// TestSSEBroadcaster_RemoveAfterDisconnectAll verifies that a handler
+// cleaning up after DisconnectAll doesn't close its channel a second time.
+func TestSSEBroadcaster_RemoveAfterDisconnectAll(t *testing.T) {
+	b := NewSSEBroadcaster()
+	ch := b.addClient()
+	b.DisconnectAll()
+	// Should not panic
+	b.removeClient(ch)
+}
+
+// TestSSEBroadcaster_ServeHTTPEndsOnDisconnectAll verifies that an open
+// stream ends when DisconnectAll is called, rather than spinning on the
+// closed channel writing empty events.
+func TestSSEBroadcaster_ServeHTTPEndsOnDisconnectAll(t *testing.T) {
+	b := NewSSEBroadcaster()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/events", nil)
+
+	done := make(chan struct{})
+	go func() {
+		b.ServeHTTP(w, req, func(ch chan string) {})
+		close(done)
+	}()
+
+	// Wait for the handler to register before disconnecting it
+	deadline := time.Now().Add(time.Second)
+	for b.ClientCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client never registered")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	b.DisconnectAll()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP kept running after DisconnectAll")
+	}
+	if strings.Contains(w.Body.String(), "data: \n") {
+		t.Error("stream contains empty data events")
+	}
 }

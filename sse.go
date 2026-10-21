@@ -45,13 +45,18 @@ func (b *SSEBroadcaster) addClient() chan string {
 	return ch
 }
 
-// removeClient unregisters an SSE client.
+// removeClient unregisters an SSE client. The channel may already be gone —
+// DisconnectAll closes and forgets every client — so it is closed only if it
+// was still registered; closing it twice would panic.
 func (b *SSEBroadcaster) removeClient(ch chan string) {
 	b.mu.Lock()
+	_, registered := b.clients[ch]
 	delete(b.clients, ch)
 	count := len(b.clients)
 	b.mu.Unlock()
-	close(ch)
+	if registered {
+		close(ch)
+	}
 	log.Printf("SSE: client disconnected (%d remaining)", count)
 }
 
@@ -131,7 +136,13 @@ func (b *SSEBroadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request, sendS
 	// Stream updates until the client disconnects
 	for {
 		select {
-		case msg := <-ch:
+		case msg, ok := <-ch:
+			if !ok {
+				// DisconnectAll closed us (the broker is gone). End the
+				// response so the browser notices and shows its offline UI;
+				// carrying on would spin on the closed channel forever.
+				return
+			}
 			// Write SSE format: "data: {json}\n\n"
 			fmt.Fprintf(w, "data: %s\n\n", msg)
 			flusher.Flush()
