@@ -17,7 +17,7 @@
 # search path). See config.go for details.
 
 # ── Stage 1: Build ──
-FROM golang:1.24-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 
 # Cache module downloads separately from source changes
