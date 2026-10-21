@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 #
-# Build a FreeBSD .pkg file and a static pkg repository.
-# Usage: build-pkg-repo.sh <version>
+# Build FreeBSD .pkg files and static pkg repositories, one per release.
+# Usage: build-pkg-repo.sh <version> <signing-key>
 #
-# Produces a repo/ directory ready to serve as a FreeBSD pkg repo.
+# Produces repo/<ABI>/ (e.g. repo/FreeBSD:15:amd64/) for every release in
+# RELEASES, so hosts can point pkg at ".../${ABI}" and get a package carrying
+# their own ABI -- pkg refuses packages built for another major version. The
+# Go binary is static and the same in all of them; only the metadata differs.
+#
+# repo/ itself also holds the FreeBSD 13 repository, because that is where
+# hosts configured before the per-ABI layout existed are pointed.
 #
 set -euo pipefail
 
 VERSION="${1:?Usage: build-pkg-repo.sh <version> <signing-key>}"
 SIGNING_KEY="${2:?Usage: build-pkg-repo.sh <version> <signing-key>}"
 NAME="homescreen"
-ABI="FreeBSD:13:amd64"
+RELEASES="13 14 15"
+LEGACY_ROOT_RELEASE="13"   # served at repo/ for hosts configured before per-ABI repos
 PREFIX="/usr/local"
 BINARY="homescreen"   # must already be built for FreeBSD
 
@@ -86,12 +93,32 @@ run_rc_command "$1"
 RCEOF
 chmod 755 "$PKGDIR/usr/local/etc/rc.d/homescreen"
 
-# --- Build manifests ---
-BIN_SHA256=$(sha256sum "$PKGDIR/usr/local/bin/homescreen" | awk '{print $1}')
-RCD_SHA256=$(sha256sum "$PKGDIR/usr/local/etc/rc.d/homescreen" | awk '{print $1}')
+sign_catalog() {
+  local content_file="$1"
+  local out_sig="$2"
+  # FreeBSD pkg verification protocol (ossl_verify_cert_cb):
+  #   1. hex_sha256 = SHA256_HEX(content)
+  #   2. hash = SHA256_RAW(hex_sha256)
+  #   3. EVP_PKEY_verify(ctx, sig, hash, 32) with md=SHA256
+  local hex
+  hex=$(sha256sum "$content_file" | awk '{print $1}')
+  echo -n "$hex" | openssl dgst -sha256 -binary > "${content_file}.hash"
+  openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "${content_file}.hash" \
+    -pkeyopt digest:sha256 -out "$out_sig"
+  rm "${content_file}.hash"
+}
 
-# +COMPACT_MANIFEST has no files detail
-COMPACT_MANIFEST=$(cat <<EOF
+# build_repo <major> -- write the .pkg, catalogs and meta for FreeBSD:<major>:amd64
+# into repo/FreeBSD:<major>:amd64/.
+build_repo() {
+  local ABI="FreeBSD:$1:amd64"
+  local ALTABI="freebsd:$1:x86:64"
+  local OUT="repo/${ABI}"
+  mkdir -p "$OUT"
+
+  # --- Build manifests ---
+  # +COMPACT_MANIFEST has no files detail
+  COMPACT_MANIFEST=$(cat <<EOF
 {
   "name": "${NAME}",
   "version": "${VERSION}",
@@ -101,16 +128,16 @@ COMPACT_MANIFEST=$(cat <<EOF
   "maintainer": "homescreen@local",
   "www": "https://github.com",
   "abi": "${ABI}",
-  "arch": "freebsd:13:x86:64",
+  "arch": "${ALTABI}",
   "prefix": "${PREFIX}",
   "flatsize": ${FLATSIZE},
   "categories": ["local"]
 }
 EOF
-)
+  )
 
-# +MANIFEST includes file entries with checksums (matching real FreeBSD pkg format)
-MANIFEST=$(cat <<EOF
+  # +MANIFEST includes file entries with checksums (matching real FreeBSD pkg format)
+  MANIFEST=$(cat <<EOF
 {
   "name": "${NAME}",
   "version": "${VERSION}",
@@ -120,7 +147,7 @@ MANIFEST=$(cat <<EOF
   "maintainer": "homescreen@local",
   "www": "https://github.com",
   "abi": "${ABI}",
-  "arch": "freebsd:13:x86:64",
+  "arch": "${ALTABI}",
   "prefix": "${PREFIX}",
   "flatsize": ${FLATSIZE},
   "categories": ["local"],
@@ -140,96 +167,91 @@ MANIFEST=$(cat <<EOF
   }
 }
 EOF
-)
+  )
 
-echo "$COMPACT_MANIFEST" > "$PKGDIR/+COMPACT_MANIFEST"
-echo "$MANIFEST" > "$PKGDIR/+MANIFEST"
+  echo "$COMPACT_MANIFEST" > "$PKGDIR/+COMPACT_MANIFEST"
+  echo "$MANIFEST" > "$PKGDIR/+MANIFEST"
 
-# --- Build .pkg (tar.zst with manifests first, absolute paths, no directory entries) ---
-mkdir -p repo
-PKG_FILENAME="${NAME}-${VERSION}.pkg"
+  # --- Build .pkg (tar.zst with manifests first, absolute paths, no directory entries) ---
+  PKG_FILENAME="${NAME}-${VERSION}.pkg"
 
-# pkg expects: manifests first (relative), then files with absolute paths, no directory entries.
-# We use transform to prepend / to file paths while keeping manifests relative.
-tar cf - \
-  --owner=root --group=wheel \
-  -C "$PKGDIR" \
-  +COMPACT_MANIFEST \
-  +MANIFEST \
-  --transform='s|^usr|/usr|' \
-  --no-recursion \
-  usr/local/bin/homescreen \
-  usr/local/etc/rc.d/homescreen \
-  | zstd -o "repo/${PKG_FILENAME}"
+  # pkg expects: manifests first (relative), then files with absolute paths, no directory entries.
+  # We use transform to prepend / to file paths while keeping manifests relative.
+  tar cf - \
+    --owner=root --group=wheel \
+    -C "$PKGDIR" \
+    +COMPACT_MANIFEST \
+    +MANIFEST \
+    --transform='s|^usr|/usr|' \
+    --no-recursion \
+    usr/local/bin/homescreen \
+    usr/local/etc/rc.d/homescreen \
+    | zstd -o "$OUT/${PKG_FILENAME}"
 
-PKGSIZE=$(stat --printf='%s' "repo/${PKG_FILENAME}")
-PKGSHA256=$(sha256sum "repo/${PKG_FILENAME}" | awk '{print $1}')
+  PKGSIZE=$(stat --printf='%s' "$OUT/${PKG_FILENAME}")
+  PKGSHA256=$(sha256sum "$OUT/${PKG_FILENAME}" | awk '{print $1}')
 
-echo "Built repo/${PKG_FILENAME} (${PKGSIZE} bytes)"
+  echo "Built $OUT/${PKG_FILENAME} (${PKGSIZE} bytes)"
 
-# --- Build repository catalogs ---
-# Package entry shared by both formats
-PKG_ENTRY=$(cat <<EOF
+  # --- Build repository catalogs ---
+  # Package entry shared by both formats
+  PKG_ENTRY=$(cat <<EOF
 {"name":"${NAME}","version":"${VERSION}","origin":"local/${NAME}","comment":"Smart home control panel","desc":"MQTT-backed smart home control panel with web UI and SSE","maintainer":"homescreen@local","www":"https://github.com","abi":"${ABI}","arch":"${ABI}","prefix":"${PREFIX}","flatsize":${FLATSIZE},"pkgsize":${PKGSIZE},"sum":"${PKGSHA256}","path":"${PKG_FILENAME}","repopath":"${PKG_FILENAME}","categories":["local"]}
 EOF
-)
+  )
 
-sign_catalog() {
-  local content_file="$1"
-  local out_sig="$2"
-  # FreeBSD pkg verification protocol (ossl_verify_cert_cb):
-  #   1. hex_sha256 = SHA256_HEX(content)
-  #   2. hash = SHA256_RAW(hex_sha256)
-  #   3. EVP_PKEY_verify(ctx, sig, hash, 32) with md=SHA256
-  local hex
-  hex=$(sha256sum "$content_file" | awk '{print $1}')
-  echo -n "$hex" | openssl dgst -sha256 -binary > "${content_file}.hash"
-  openssl pkeyutl -sign -inkey "$SIGNING_KEY" -in "${content_file}.hash" \
-    -pkeyopt digest:sha256 -out "$out_sig"
-  rm "${content_file}.hash"
-}
+  TMPCAT=$(mktemp -d)
 
-TMPCAT=$(mktemp -d)
-
-# data.pkg — pkg 2.x format: JSON object with "packages" array.
-# Entry name inside tar must be "data" (repo->meta->data default).
-cat > "$TMPCAT/data" <<EOF
+  # data.pkg — pkg 2.x format: JSON object with "packages" array.
+  # Entry name inside tar must be "data" (repo->meta->data default).
+  cat > "$TMPCAT/data" <<EOF
 {"packages":[${PKG_ENTRY}]}
 EOF
-sign_catalog "$TMPCAT/data" "$TMPCAT/signature"
-(cd "$TMPCAT" && tar cf - data signature) | zstd -o repo/data.pkg
-rm "$TMPCAT/data" "$TMPCAT/signature"
-echo "Built and signed data.pkg (v2 format)"
+  sign_catalog "$TMPCAT/data" "$TMPCAT/signature"
+  (cd "$TMPCAT" && tar cf - data signature) | zstd -o "$OUT/data.pkg"
+  rm "$TMPCAT/data" "$TMPCAT/signature"
+  echo "Built and signed data.pkg (v2 format)"
 
-# packagesite.pkg — legacy format: one JSON object per line.
-# Entry name inside tar must be "packagesite.yaml" (repo->meta->manifests default).
-echo "$PKG_ENTRY" > "$TMPCAT/packagesite.yaml"
-sign_catalog "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
-(cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o repo/packagesite.pkg
-rm "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
-echo "Built and signed packagesite.pkg (legacy format)"
+  # packagesite.pkg — legacy format: one JSON object per line.
+  # Entry name inside tar must be "packagesite.yaml" (repo->meta->manifests default).
+  echo "$PKG_ENTRY" > "$TMPCAT/packagesite.yaml"
+  sign_catalog "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
+  (cd "$TMPCAT" && tar cf - packagesite.yaml signature) | zstd -o "$OUT/packagesite.pkg"
+  rm "$TMPCAT/packagesite.yaml" "$TMPCAT/signature"
+  echo "Built and signed packagesite.pkg (legacy format)"
 
-# meta.conf
-cat > repo/meta.conf << 'METAEOF'
+  # meta.conf
+  cat > "$OUT/meta.conf" << 'METAEOF'
 version = 2;
 packing_format = "tzst";
 METAEOF
 
-# Also create meta.pkg (tar.zst of meta.conf)
-(cd repo && tar cf - meta.conf) | zstd -o repo/meta.pkg
+  # Also create meta.pkg (tar.zst of meta.conf)
+  (cd "$OUT" && tar cf - meta.conf) | zstd -o "$OUT/meta.pkg"
 
-rm -rf "$TMPCAT"
+  rm -rf "$TMPCAT"
+}
+
+BIN_SHA256=$(sha256sum "$PKGDIR/usr/local/bin/homescreen" | awk '{print $1}')
+RCD_SHA256=$(sha256sum "$PKGDIR/usr/local/etc/rc.d/homescreen" | awk '{print $1}')
+
+rm -rf repo
+for release in $RELEASES; do
+  build_repo "$release"
+done
+cp "repo/FreeBSD:${LEGACY_ROOT_RELEASE}:amd64/"* repo/
 
 echo ""
-echo "Repository built in repo/:"
-ls -lh repo/
+echo "Repositories built in repo/:"
+ls -lhR repo/
 echo ""
 echo "Configure on FreeBSD with:"
 echo '  mkdir -p /usr/local/etc/pkg/repos /usr/local/etc/pkg/keys'
 echo '  # Copy homescreen-repo.pub to /usr/local/etc/pkg/keys/homescreen.pub'
-echo '  cat > /usr/local/etc/pkg/repos/homescreen.conf << EOF'
+echo "  # Quote 'EOF' so the shell leaves \${ABI} for pkg to expand (e.g. FreeBSD:15:amd64)."
+echo "  cat > /usr/local/etc/pkg/repos/homescreen.conf << 'EOF'"
 echo '  homescreen: {'
-echo '    url: "https://<user>.github.io/<repo>"'
+echo '    url: "https://<user>.github.io/<repo>/${ABI}"'
 echo '    enabled: yes'
 echo '    signature_type: "pubkey"'
 echo '    pubkey: "/usr/local/etc/pkg/keys/homescreen.pub"'
