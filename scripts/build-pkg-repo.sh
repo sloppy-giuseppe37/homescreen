@@ -8,16 +8,12 @@
 # their own ABI -- pkg refuses packages built for another major version. The
 # Go binary is static and the same in all of them; only the metadata differs.
 #
-# repo/ itself also holds the FreeBSD 13 repository, because that is where
-# hosts configured before the per-ABI layout existed are pointed.
-#
 set -euo pipefail
 
 VERSION="${1:?Usage: build-pkg-repo.sh <version> <signing-key>}"
 SIGNING_KEY="${2:?Usage: build-pkg-repo.sh <version> <signing-key>}"
 NAME="homescreen"
-RELEASES="13 14 15"
-LEGACY_ROOT_RELEASE="13"   # served at repo/ for hosts configured before per-ABI repos
+RELEASES="13 15"
 PREFIX="/usr/local"
 BINARY="homescreen"   # must already be built for FreeBSD
 
@@ -239,7 +235,6 @@ rm -rf repo
 for release in $RELEASES; do
   build_repo "$release"
 done
-cp "repo/FreeBSD:${LEGACY_ROOT_RELEASE}:amd64/"* repo/
 
 echo ""
 echo "Repositories built in repo/:"

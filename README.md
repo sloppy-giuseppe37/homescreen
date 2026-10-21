@@ -148,7 +148,7 @@ Manage with `systemctl status homescreen`, `journalctl -u homescreen -f`.
 ### As a FreeBSD service
 
 Every push to `main` publishes signed pkg repositories to GitHub Pages, one per
-release: `FreeBSD:13:amd64/`, `FreeBSD:14:amd64/` and `FreeBSD:15:amd64/`.
+release: `FreeBSD:13:amd64/` and `FreeBSD:15:amd64/`.
 pkg refuses packages built for another major version, so point it at the one
 matching the host by letting pkg expand `${ABI}`:
 
@@ -165,10 +165,6 @@ homescreen: {
 EOF
 pkg update && pkg install homescreen
 ```
-
-The repository root still serves the FreeBSD 13 package for hosts configured
-before the per-release layout; after upgrading such a host to 14 or 15, add
-`/${ABI}` to its `url`.
 
 The pkg installs an rc.d script at `/usr/local/etc/rc.d/homescreen`:
 
